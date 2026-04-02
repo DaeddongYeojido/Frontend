@@ -50,15 +50,15 @@ class CrowdedButton extends ConsumerWidget {
             const Icon(Icons.local_fire_department,
                 color: Colors.white, size: 20),
             const SizedBox(height: 2),
-            const Text('BOOM-\nBYEO-YO',
+            const Text('붐벼요',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                     color: Colors.white,
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.bold,
                     height: 1.2)),
             const SizedBox(height: 2),
-            Text('$crowdedCount votes',
+            Text('$crowdedCount 표',
                 style: const TextStyle(
                     color: Colors.white70, fontSize: 10)),
           ],
