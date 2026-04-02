@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'core/theme/app_colors.dart';
@@ -13,8 +12,6 @@ void main() async {
   await Hive.initFlutter();
   Hive.registerAdapter(FavoriteToiletAdapter());
   await FavoriteRepository.init();
-
-  await NaverMapSdk.instance.initialize(clientId: 'a60t7fi5fr');
 
   runApp(const ProviderScope(child: DaeddongApp()));
 }

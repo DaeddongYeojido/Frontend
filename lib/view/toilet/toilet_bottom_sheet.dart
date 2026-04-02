@@ -80,9 +80,30 @@ class _Content extends ConsumerWidget {
                 color: Colors.grey[300],
                 borderRadius: BorderRadius.circular(2)),
           )),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
 
-          // 상단 행
+          // 이름 + 붐벼요 버튼 일렬
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(detail.name,
+                    style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                        height: 1.2)),
+              ),
+              const SizedBox(width: 12),
+              CrowdedButton(
+                toiletId: detail.id,
+                crowdedCount: detail.crowdSummary['CROWDED'] ?? 0,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // 상단 행 (운영상태 + 별점 + 즐겨찾기)
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -91,7 +112,6 @@ class _Content extends ConsumerWidget {
                   children: [
                     OpenStatusBadge(status: detail.openStatus),
                     const SizedBox(width: 8),
-                    // 별점 → 리뷰 팝업
                     GestureDetector(
                       onTap: () => _openReview(context),
                       child: Row(children: [
@@ -110,7 +130,6 @@ class _Content extends ConsumerWidget {
                       ]),
                     ),
                     const SizedBox(width: 6),
-                    // 즐겨찾기 버튼
                     GestureDetector(
                       onTap: () =>
                           ref.read(favoriteProvider.notifier).toggle(summary),
@@ -123,21 +142,9 @@ class _Content extends ConsumerWidget {
                   ],
                 ),
               ),
-              CrowdedButton(
-                  toiletId: detail.id,
-                  crowdedCount: detail.crowdedCount),
             ],
           ),
-          const SizedBox(height: 10),
-
-          // 이름
-          Text(detail.name,
-              style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                  height: 1.2)),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
 
           // 주소
           Text(detail.address,
@@ -148,11 +155,11 @@ class _Content extends ConsumerWidget {
           // 태그
           Row(children: [
             if (detail.isDisabled) ...[
-              _TagChip(icon: Icons.accessible, label: 'Accessible'),
+              _TagChip(icon: Icons.accessible, label: '장애인 화장실'),
               const SizedBox(width: 8),
             ],
             if (detail.isGenderSep)
-              _TagChip(icon: Icons.wc, label: 'Separate M/F'),
+              _TagChip(icon: Icons.wc, label: '남녀 구분'),
           ]),
 
           // 운영시간
@@ -191,11 +198,11 @@ class _Content extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(12)),
                 elevation: 0,
               ),
-              child: const Text('VIEW DETAIL DIRECTIONS',
+              child: const Text('상세 길찾기',
                   style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: 1)),
+                      letterSpacing: 0.5)),
             ),
           ),
         ],
