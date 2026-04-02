@@ -22,7 +22,7 @@ class ReviewNotifier extends AsyncNotifier<void> {
     required int toiletId,
     required int rating,
     String? content,
-    File? image, // ← 추가
+    File? image,
   }) async {
     state = const AsyncLoading();
     final deviceId = await DeviceIdUtil.getDeviceId();
@@ -32,7 +32,7 @@ class ReviewNotifier extends AsyncNotifier<void> {
             deviceId: deviceId,
             rating: rating,
             content: content,
-            image: image, // ← 추가
+            image: image,
           ),
     );
     state = const AsyncData(null);

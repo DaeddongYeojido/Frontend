@@ -11,8 +11,8 @@ class ToiletDetail {
   final String source;
   final Map<String, int> crowdSummary;
   final String? currentCrowd;
-  final double? averageRating;  // 백엔드 신규 필드
-  final int reviewCount;        // 백엔드 신규 필드
+  final double? averageRating;
+  final int reviewCount;
 
   const ToiletDetail({
     required this.id,

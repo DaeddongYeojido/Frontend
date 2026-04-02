@@ -27,10 +27,11 @@ class FavoritesScreen extends ConsumerWidget {
       body: favorites.isEmpty
           ? const _Empty()
           : ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        itemCount: favorites.length,
-        itemBuilder: (_, i) => _Card(toilet: favorites[i]),
-      ),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemCount: favorites.length,
+              itemBuilder: (_, i) => _Card(toilet: favorites[i]),
+            ),
     );
   }
 }
@@ -39,16 +40,19 @@ class _Empty extends StatelessWidget {
   const _Empty();
   @override
   Widget build(BuildContext context) => const Center(
-    child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Icon(Icons.favorite_border, size: 56, color: AppColors.textHint),
-      SizedBox(height: 12),
-      Text('즐겨찾기한 화장실이 없어요.',
-          style: TextStyle(fontSize: 15, color: AppColors.textSecondary)),
-      SizedBox(height: 4),
-      Text('화장실 상세에서 하트를 눌러 추가해보세요.',
-          style: TextStyle(fontSize: 12, color: AppColors.textHint)),
-    ]),
-  );
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.favorite_border,
+              size: 56, color: AppColors.textHint),
+          SizedBox(height: 12),
+          Text('즐겨찾기한 화장실이 없어요.',
+              style: TextStyle(
+                  fontSize: 15, color: AppColors.textSecondary)),
+          SizedBox(height: 4),
+          Text('화장실 상세에서 하트를 눌러 추가해보세요.',
+              style:
+                  TextStyle(fontSize: 12, color: AppColors.textHint)),
+        ]),
+      );
 }
 
 class _Card extends ConsumerWidget {
@@ -56,60 +60,130 @@ class _Card extends ConsumerWidget {
   const _Card({required this.toilet});
 
   ToiletSummary _toSummary(FavoriteToilet f) => ToiletSummary(
-    id: f.id, name: f.name, address: f.address,
-    lat: f.lat, lng: f.lng, openStatus: f.openStatus,
-    isDisabled: f.isDisabled, isGenderSep: f.isGenderSep,
-  );
+        id: f.id,
+        name: f.name,
+        address: f.address,
+        lat: f.lat,
+        lng: f.lng,
+        openStatus: f.openStatus,
+        isDisabled: f.isDisabled,
+        isGenderSep: f.isGenderSep,
+      );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 6,
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 8,
               offset: const Offset(0, 2))
         ],
       ),
-      child: ListTile(
-        contentPadding:
-        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Container(
-          width: 42, height: 42,
-          decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.circular(10)),
-          child: const Icon(Icons.wc, color: AppColors.primary, size: 22),
-        ),
-        title: Text(toilet.name,
-            style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                color: AppColors.textPrimary),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(toilet.address,
-                style: const TextStyle(
-                    fontSize: 12, color: AppColors.textSecondary),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 4),
-            OpenStatusBadge(status: toilet.openStatus),
-          ]),
-        ),
-        trailing: IconButton(
-          icon: const Icon(Icons.favorite, color: Colors.red, size: 20),
-          onPressed: () =>
-              ref.read(favoriteProvider.notifier).toggle(_toSummary(toilet)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 아이콘
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.wc,
+                  color: AppColors.primary, size: 22),
+            ),
+            const SizedBox(width: 12),
+
+            // 정보 영역
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 이름
+                  Text(toilet.name,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: AppColors.textPrimary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 4),
+
+                  // 주소
+                  Text(toilet.address,
+                      style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 8),
+
+                  // 상태 배지 + 태그들
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      OpenStatusBadge(status: toilet.openStatus),
+                      if (toilet.isDisabled)
+                        _TagChip(
+                            icon: Icons.accessible,
+                            label: '장애인 화장실'),
+                      if (toilet.isGenderSep)
+                        _TagChip(icon: Icons.wc, label: '남녀 구분'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // 즐겨찾기 해제 버튼
+            GestureDetector(
+              onTap: () => ref
+                  .read(favoriteProvider.notifier)
+                  .toggle(_toSummary(toilet)),
+              child: const Padding(
+                padding: EdgeInsets.only(left: 8, top: 2),
+                child: Icon(Icons.favorite, color: Colors.red, size: 22),
+              ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+class _TagChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _TagChip({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.filterBorder),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 12, color: AppColors.textSecondary),
+        const SizedBox(width: 3),
+        Text(label,
+            style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w500)),
+      ]),
     );
   }
 }

@@ -43,13 +43,16 @@ class ReviewPage {
     required this.last,
   });
 
-  factory ReviewPage.fromJson(Map<String, dynamic> json) => ReviewPage(
-        content: (json['content'] as List)
-            .map((e) => Review.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        totalElements: (json['totalElements'] as num).toInt(),
-        totalPages: (json['totalPages'] as num).toInt(),
-        number: (json['number'] as num).toInt(),
-        last: json['last'] as bool,
-      );
+  factory ReviewPage.fromJson(Map<String, dynamic> json) {
+    final page = json['page'] as Map<String, dynamic>? ?? {};
+    return ReviewPage(
+      content: (json['content'] as List)
+          .map((e) => Review.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      totalElements: (page['totalElements'] as num?)?.toInt() ?? 0,
+      totalPages: (page['totalPages'] as num?)?.toInt() ?? 0,
+      number: (page['number'] as num?)?.toInt() ?? 0,
+      last: (page['number'] as num?)?.toInt() == ((page['totalPages'] as num?)?.toInt() ?? 1) - 1,
+    );
+  }
 }
