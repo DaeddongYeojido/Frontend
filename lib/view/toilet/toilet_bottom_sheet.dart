@@ -9,42 +9,60 @@ import '../widget/open_status_badge.dart';
 import '../widget/crowded_button.dart';
 import '../widget/review_popup.dart';
 
-class ToiletBottomSheet extends ConsumerWidget {
+class ToiletBottomSheet extends ConsumerStatefulWidget {
   final int toiletId;
   final VoidCallback? onDismiss;
   const ToiletBottomSheet({super.key, required this.toiletId, this.onDismiss});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final detailAsync = ref.watch(toiletDetailProvider(toiletId));
+  ConsumerState<ToiletBottomSheet> createState() => _ToiletBottomSheetState();
+}
+
+class _ToiletBottomSheetState extends ConsumerState<ToiletBottomSheet>
+    with SingleTickerProviderStateMixin {
+  double _dragOffset = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final detailAsync = ref.watch(toiletDetailProvider(widget.toiletId));
 
     return GestureDetector(
-      // ③ 아래로 스와이프하면 닫기
-      onVerticalDragEnd: (details) {
-        if (details.primaryVelocity != null && details.primaryVelocity! > 300) {
-          onDismiss?.call();
+      // ③ 드래그 중에 transform으로 따라가다가, 충분히 내리면 dismiss
+      onVerticalDragUpdate: (d) {
+        if (d.delta.dy > 0) {
+          setState(() => _dragOffset += d.delta.dy);
         }
       },
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
-        ),
-        child: detailAsync.when(
-          loading: () => const SizedBox(
-            height: 180,
-            child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+      onVerticalDragEnd: (d) {
+        if (_dragOffset > 80 || (d.primaryVelocity ?? 0) > 400) {
+          widget.onDismiss?.call();
+        } else {
+          setState(() => _dragOffset = 0);
+        }
+      },
+      child: Transform.translate(
+        offset: Offset(0, _dragOffset),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
           ),
-          error: (e, _) => SizedBox(
-            height: 180,
-            child: Center(
-              child: Text('불러오지 못했어요.\n$e',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppColors.textSecondary)),
+          child: detailAsync.when(
+            loading: () => const SizedBox(
+              height: 180,
+              child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
             ),
+            error: (e, _) => SizedBox(
+              height: 180,
+              child: Center(
+                child: Text('불러오지 못했어요.\n$e',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AppColors.textSecondary)),
+              ),
+            ),
+            data: (detail) => _Content(detail: detail, onDismiss: widget.onDismiss),
           ),
-          data: (detail) => _Content(detail: detail, onDismiss: onDismiss),
         ),
       ),
     );
@@ -77,29 +95,26 @@ class _Content extends ConsumerWidget {
     );
 
     return Padding(
-      // ④ 상단 패딩을 12→8로 줄여 이름 위 여백 축소
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 핸들 바
+          // 핸들
           Center(child: Container(
             width: 40, height: 4,
             decoration: BoxDecoration(
                 color: Colors.grey[300],
                 borderRadius: BorderRadius.circular(2)),
           )),
-          // ④ 핸들→이름 간격도 8→6으로 줄임
-          const SizedBox(height: 6),
 
-          // 이름 + 붐벼요 버튼: IntrinsicHeight로 버튼은 오른쪽 고정,
-          // 왼쪽 정보는 자연스럽게 위로 밀착
+          // ④ 이름~붐벼요 상단 여백 3px
+          const SizedBox(height: 3),
+
           IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 왼쪽: 이름 / 운영상태+별점+즐겨찾기 / 주소 / 태그
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,6 +128,18 @@ class _Content extends ConsumerWidget {
                               color: AppColors.textPrimary,
                               height: 1.2)),
                       const SizedBox(height: 6),
+
+                      // ④ 영업시간을 OPEN 배지 바로 아래에 배치
+                      if (detail.openHours != null) ...[
+                        Row(children: [
+                          const Icon(Icons.access_time, size: 13, color: AppColors.textSecondary),
+                          const SizedBox(width: 4),
+                          Text(detail.openHours!,
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppColors.textSecondary)),
+                        ]),
+                        const SizedBox(height: 5),
+                      ],
 
                       // 운영상태 + 별점 + 즐겨찾기
                       Row(
@@ -165,25 +192,13 @@ class _Content extends ConsumerWidget {
                         if (detail.isGenderSep)
                           _TagChip(icon: Icons.wc, label: '남녀 구분'),
                       ]),
-
-                      // 운영시간
-                      if (detail.openHours != null) ...[
-                        const SizedBox(height: 8),
-                        Row(children: [
-                          const Icon(Icons.access_time, size: 14, color: AppColors.textSecondary),
-                          const SizedBox(width: 4),
-                          Text(detail.openHours!,
-                              style: const TextStyle(
-                                  fontSize: 12, color: AppColors.textSecondary)),
-                        ]),
-                      ],
                     ],
                   ),
                 ),
 
                 const SizedBox(width: 12),
 
-                // 오른쪽: 붐벼요 버튼 (상단 고정)
+                // 붐벼요 버튼 (우상단 고정)
                 Align(
                   alignment: Alignment.topCenter,
                   child: CrowdedButton(

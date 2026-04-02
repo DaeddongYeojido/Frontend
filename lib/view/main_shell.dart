@@ -12,8 +12,12 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends State<MainShell>
+    with SingleTickerProviderStateMixin {
   int _index = 0;
+  int _prevIndex = 0;
+  late AnimationController _animCtrl;
+  late Animation<double> _fadeAnim;
 
   static const _screens = [
     MapScreen(),
@@ -23,12 +27,44 @@ class _MainShellState extends State<MainShell> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _animCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    );
+    _fadeAnim = CurvedAnimation(parent: _animCtrl, curve: Curves.easeInOut);
+    _animCtrl.value = 1.0; // 처음엔 바로 보임
+  }
+
+  @override
+  void dispose() {
+    _animCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onTap(int i) {
+    if (i == _index) return;
+    // ⑤ fade-out → 화면 교체 → fade-in
+    _animCtrl.reverse().then((_) {
+      setState(() {
+        _prevIndex = _index;
+        _index = i;
+      });
+      _animCtrl.forward();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _index, children: _screens),
+      body: FadeTransition(
+        opacity: _fadeAnim,
+        child: IndexedStack(index: _index, children: _screens),
+      ),
       bottomNavigationBar: _BottomNav(
         currentIndex: _index,
-        onTap: (i) => setState(() => _index = i),
+        onTap: _onTap,
       ),
     );
   }
@@ -40,10 +76,10 @@ class _BottomNav extends StatelessWidget {
   const _BottomNav({required this.currentIndex, required this.onTap});
 
   static const _items = [
-    (icon: Icons.map,       label: '지도'),
-    (icon: Icons.favorite,  label: '즐겨찾기'),
+    (icon: Icons.map,             label: '지도'),
+    (icon: Icons.favorite,        label: '즐겨찾기'),
     (icon: Icons.article_outlined, label: '제보 게시판'),
-    (icon: Icons.settings,  label: '설정'),
+    (icon: Icons.settings,        label: '설정'),
   ];
 
   @override
