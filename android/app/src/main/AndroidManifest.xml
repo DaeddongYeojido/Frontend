@@ -3,7 +3,7 @@
     <!-- 위치 권한 -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-    <!-- 인터넷 권한 (API 통신) -->
+    <!-- 인터넷 권한 -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
     <application
@@ -21,33 +21,27 @@
             android:windowSoftInputMode="adjustResize">
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
-                android:resource="@style/NormalTheme"
-                />
+                android:resource="@style/NormalTheme"/>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
 
-        <!-- 네이버 지도 Client ID -->
         <meta-data
-            android:name="com.naver.maps.map.CLIENT_ID"
-            android:value="a60t7fi5fr"/>
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyBcRsiM8ZSbcoqL40RS_BEzJR6w5Cw_PGo"/>
 
         <meta-data
             android:name="flutterEmbedding"
-            android:value="2" />
+            android:value="2"/>
     </application>
 
-    <!-- 네이버 지도 길찾기 딥링크 -->
+    <!-- 구글맵 길찾기 딥링크 -->
     <queries>
         <intent>
-            <action android:name="android.intent.action.PROCESS_TEXT"/>
-            <data android:mimeType="text/plain"/>
-        </intent>
-        <intent>
             <action android:name="android.intent.action.VIEW"/>
-            <data android:scheme="nmap"/>
+            <data android:scheme="geo"/>
         </intent>
     </queries>
 </manifest>

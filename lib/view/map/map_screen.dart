@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_naver_map/flutter_naver_map.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../provider/location_provider.dart';
@@ -16,8 +16,9 @@ class MapScreen extends ConsumerStatefulWidget {
 }
 
 class _MapScreenState extends ConsumerState<MapScreen> {
-  NaverMapController? _ctrl;
+  GoogleMapController? _ctrl;
   int? _selectedId;
+  Set<Marker> _markers = {};
 
   @override
   Widget build(BuildContext context) {
@@ -49,24 +50,21 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ]),
               ),
             ),
-            data: (pos) => NaverMap(
-              options: NaverMapViewOptions(
-                initialCameraPosition: NCameraPosition(
-                  target: NLatLng(pos.latitude, pos.longitude),
-                  zoom: 15,
-                ),
-                locationButtonEnable: false,
-                consumeSymbolTapEvents: false,
+            data: (pos) => GoogleMap(
+              initialCameraPosition: CameraPosition(
+                target: LatLng(pos.latitude, pos.longitude),
+                zoom: 15,
               ),
-              onMapReady: (controller) async {
+              myLocationEnabled: true,
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
+              markers: _markers,
+              onMapCreated: (controller) {
                 _ctrl = controller;
-                controller.setLocationTrackingMode(
-                    NLocationTrackingMode.follow);
-                // 지도 준비 완료 후 현재 toilets 데이터로 마커 즉시 그리기
                 final toilets = ref.read(nearbyToiletsProvider).value;
                 if (toilets != null) _updateMarkers(toilets);
               },
-              onMapTapped: (_, __) {
+              onTap: (_) {
                 if (_selectedId != null) {
                   setState(() => _selectedId = null);
                 }
@@ -81,6 +79,24 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ref.read(toiletFilterProvider.notifier).state = f,
           ),
 
+          // 현재 위치 버튼 (구글맵 기본 버튼 대신 커스텀)
+          Positioned(
+            right: 16,
+            bottom: _selectedId != null ? 320 : 100,
+            child: FloatingActionButton.small(
+              backgroundColor: Colors.white,
+              onPressed: () async {
+                final pos = ref.read(locationProvider).value;
+                if (pos != null && _ctrl != null) {
+                  _ctrl!.animateCamera(CameraUpdate.newLatLng(
+                    LatLng(pos.latitude, pos.longitude),
+                  ));
+                }
+              },
+              child: const Icon(Icons.my_location, color: AppColors.primary),
+            ),
+          ),
+
           // 바텀시트
           if (_selectedId != null)
             Positioned(
@@ -92,26 +108,27 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  Future<void> _updateMarkers(List<ToiletSummary> toilets) async {
-    if (_ctrl == null) return;
-    await _ctrl!.clearOverlays();
-    for (final t in toilets) {
+  void _updateMarkers(List<ToiletSummary> toilets) {
+    final markers = toilets.map((t) {
       final color = switch (t.openStatus) {
-        'OPEN'  => AppColors.open,
-        'NIGHT' => AppColors.night,
-        _       => AppColors.closed,
+        'OPEN'  => BitmapDescriptor.hueGreen,
+        'NIGHT' => BitmapDescriptor.hueOrange,
+        _       => BitmapDescriptor.hueRed,
       };
-      final marker = NMarker(
-        id: t.id.toString(),
-        position: NLatLng(t.lat, t.lng),
-        caption: NOverlayCaption(text: t.name, textSize: 10),
-        iconTintColor: color,
+      return Marker(
+        markerId: MarkerId(t.id.toString()),
+        position: LatLng(t.lat, t.lng),
+        icon: BitmapDescriptor.defaultMarkerWithHue(color),
+        infoWindow: InfoWindow(title: t.name, snippet: t.address),
+        onTap: () => setState(() => _selectedId = t.id),
       );
-      marker.setOnTapListener((_) => setState(() => _selectedId = t.id));
-      await _ctrl!.addOverlay(marker);
-    }
+    }).toSet();
+
+    setState(() => _markers = markers);
   }
 }
+
+// ── TopBar / FilterChip (기존 코드 그대로) ────────────────────────────────
 
 class _TopBar extends StatelessWidget {
   final ToiletFilter filter;
@@ -120,53 +137,52 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            color: AppColors.background,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(children: [
-              Image.asset('assets/images/logo.png', height: 32,
-                  errorBuilder: (_, __, ___) =>
-                      const Icon(Icons.wc, color: AppColors.primary, size: 32)),
-              const SizedBox(width: 8),
-              Image.asset('assets/images/textlogo.png', height: 22,
-                  errorBuilder: (_, __, ___) =>
-                      const Text('대똥여지도',
-                          style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary))),
-            ]),
+    final topPadding = MediaQuery.of(context).padding.top;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          color: AppColors.background,
+          padding: EdgeInsets.fromLTRB(16, topPadding + 8, 16, 10),
+          child: Row(children: [
+            Image.asset('assets/images/logo.png', height: 32,
+                errorBuilder: (_, __, ___) =>
+                    const Icon(Icons.wc, color: AppColors.primary, size: 32)),
+            const SizedBox(width: 8),
+            Image.asset('assets/images/textlogo.png', height: 22,
+                errorBuilder: (_, __, ___) =>
+                    const Text('대똥여지도',
+                        style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary))),
+          ]),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 14, top: 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _FilterChip(
+                icon: Icons.access_time,
+                label: '운영중만 보기',
+                isActive: filter.showOnlyOpen,
+                onTap: () => onFilterChanged(
+                    filter.copyWith(showOnlyOpen: !filter.showOnlyOpen)),
+              ),
+              const SizedBox(height: 6),
+              _FilterChip(
+                icon: Icons.accessible,
+                label: '장애인 화장실',
+                isActive: filter.showOnlyDisabled,
+                onTap: () => onFilterChanged(filter.copyWith(
+                    showOnlyDisabled: !filter.showOnlyDisabled)),
+              ),
+            ],
           ),
-          Padding(
-            padding: const EdgeInsets.only(left: 14, top: 6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _FilterChip(
-                  icon: Icons.access_time,
-                  label: 'SHOW ONLY OPEN',
-                  isActive: filter.showOnlyOpen,
-                  onTap: () => onFilterChanged(
-                      filter.copyWith(showOnlyOpen: !filter.showOnlyOpen)),
-                ),
-                const SizedBox(height: 6),
-                _FilterChip(
-                  icon: Icons.accessible,
-                  label: 'HANDICAPPED ACCESSIBLE',
-                  isActive: filter.showOnlyDisabled,
-                  onTap: () => onFilterChanged(filter.copyWith(
-                      showOnlyDisabled: !filter.showOnlyDisabled)),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
