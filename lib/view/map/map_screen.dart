@@ -9,7 +9,6 @@ import '../../provider/location_provider.dart';
 import '../../provider/toilet_provider.dart';
 import '../../provider/filter_provider.dart';
 import '../../data/model/toilet_summary.dart';
-import '../../data/repository/toilet_repository.dart';
 import '../toilet/toilet_bottom_sheet.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
@@ -31,7 +30,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   // 지도 이동 검색용
   LatLng? _mapCenter;
   bool _showSearchHereButton = false;
-  List<ToiletSummary> _mapToilets = [];
 
   @override
   void initState() {
@@ -45,7 +43,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       final ByteData data = await rootBundle.load('assets/images/marker.png');
       final ui.Codec codec = await ui.instantiateImageCodec(
         data.buffer.asUint8List(),
-        targetWidth: 90,
+        targetWidth: 70,
       );
       final ui.FrameInfo fi = await codec.getNextFrame();
       final ByteData? byteData =
@@ -59,11 +57,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     if (toilets != null && mounted) _updateMarkers(toilets);
   }
 
-  // 4번: 파란 점 조금 더 크게 (커스텀 마커로 그리기)
   Future<void> _buildMyLocationCircleMarker() async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    const size = 28.0; // 기존보다 키움
+    const size = 36.0;
 
     // 외곽 흰 원
     final outerPaint = Paint()..color = Colors.white;
@@ -71,7 +68,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     // 파란 원
     final innerPaint = Paint()..color = const Color(0xFF4285F4);
-    canvas.drawCircle(const Offset(size / 2, size / 2), size / 2 - 3, innerPaint);
+    canvas.drawCircle(
+        const Offset(size / 2, size / 2), size / 2 - 3, innerPaint);
 
     final picture = recorder.endRecording();
     final img = await picture.toImage(size.toInt(), size.toInt());
@@ -89,11 +87,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final locationAsync = ref.watch(locationProvider);
     final filter = ref.watch(toiletFilterProvider);
 
+    // nearbyToiletsProvider가 바뀌면 마커 업데이트
     ref.listen(nearbyToiletsProvider, (_, next) {
-      next.whenData((toilets) {
-        _mapToilets = toilets;
-        _updateMarkers(toilets);
-      });
+      next.whenData((toilets) => _updateMarkers(toilets));
     });
 
     ref.listen(locationProvider, (_, next) {
@@ -101,7 +97,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           (pos) => _updateLocationCircle(pos.latitude, pos.longitude));
     });
 
-    // 현재 선택된 화장실 높이에 따라 버튼 위치 계산
     final bottomSheetVisible = _selectedId != null;
 
     return Scaffold(
@@ -131,12 +126,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 target: LatLng(pos.latitude, pos.longitude),
                 zoom: 15,
               ),
-              myLocationEnabled: false, // 커스텀으로 대체
+              myLocationEnabled: false,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
               markers: {
                 ..._markers,
-                // 내 위치 마커 (파란 점 크게)
                 if (_myLocationIcon != null)
                   Marker(
                     markerId: const MarkerId('my_location'),
@@ -150,17 +144,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               onMapCreated: (controller) {
                 _ctrl = controller;
                 final toilets = ref.read(nearbyToiletsProvider).value;
-                if (toilets != null) {
-                  _mapToilets = toilets;
-                  _updateMarkers(toilets);
-                }
+                if (toilets != null) _updateMarkers(toilets);
                 _updateLocationCircle(pos.latitude, pos.longitude);
               },
               onCameraMove: (position) {
                 _mapCenter = position.target;
               },
               onCameraIdle: () {
-                // 지도가 멈추면 "이 지역 검색" 버튼 표시
                 if (_mapCenter != null) {
                   setState(() => _showSearchHereButton = true);
                 }
@@ -177,7 +167,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ref.read(toiletFilterProvider.notifier).state = f,
           ),
 
-          // 6번: "이 지역 검색" 버튼
+          // "이 지역 검색" 버튼
           if (_showSearchHereButton)
             Positioned(
               top: 130,
@@ -185,21 +175,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               right: 0,
               child: Center(
                 child: GestureDetector(
-                  onTap: () async {
+                  onTap: () {
                     if (_mapCenter == null) return;
                     setState(() => _showSearchHereButton = false);
-                    try {
-                      final filter = ref.read(toiletFilterProvider);
-                      final repo = ToiletRepository();
-                      final toilets = await repo.getNearby(
-                        lat: _mapCenter!.latitude,
-                        lng: _mapCenter!.longitude,
-                        openStatus: filter.openStatusParam,
-                        isDisabled: filter.isDisabledParam,
-                      );
-                      _mapToilets = toilets;
-                      _updateMarkers(toilets);
-                    } catch (_) {}
+                    // searchLocationProvider 업데이트 →
+                    // nearbyToiletsProvider 자동 재실행 →
+                    // 필터도 함께 적용됨
+                    ref.read(searchLocationProvider.notifier).state =
+                        _mapCenter;
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -232,13 +215,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
             ),
 
-          // 3번: 현위치 버튼 - 하단 네비 바로 위 (바텀시트 있으면 그 위로)
+          // 현위치 버튼
           Positioned(
-            right: 16,
+            right: 18,
             bottom: bottomSheetVisible
                 ? 310 + MediaQuery.of(context).padding.bottom
-                : 16 + MediaQuery.of(context).padding.bottom + 60,
-            // 60 = 하단 네비게이션 바 높이
+                : 16 + MediaQuery.of(context).padding.bottom + 20,
             child: FloatingActionButton.small(
               backgroundColor: Colors.white,
               elevation: 4,
@@ -248,9 +230,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   _ctrl!.animateCamera(CameraUpdate.newLatLng(
                     LatLng(pos.latitude, pos.longitude),
                   ));
+                  // GPS 위치로 돌아갈 때 searchLocation 초기화
+                  ref.read(searchLocationProvider.notifier).state = null;
+                  setState(() => _showSearchHereButton = false);
                 }
               },
-              child: const Icon(Icons.my_location, color: AppColors.primary),
+              child:
+                  const Icon(Icons.my_location, color: AppColors.primary),
             ),
           ),
 

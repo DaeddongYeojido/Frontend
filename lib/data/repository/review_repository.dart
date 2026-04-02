@@ -17,13 +17,12 @@ class ReviewRepository {
   }
 
   /// multipart/form-data 방식으로 변경
-  /// `data` 파트: JSON, `image` 파트: 파일 (선택)
   Future<Review> createReview({
     required int toiletId,
     required String deviceId,
     required int rating,
     String? content,
-    File? image,              // ← 추가된 사진 파트
+    File? image,
   }) async {
     final dataMap = <String, dynamic>{
       'deviceId': deviceId,
