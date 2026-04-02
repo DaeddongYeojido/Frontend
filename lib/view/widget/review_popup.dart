@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/device_id_util.dart';
 import '../../data/model/review.dart';
@@ -23,8 +25,8 @@ class ReviewPopup extends ConsumerStatefulWidget {
 class _ReviewPopupState extends ConsumerState<ReviewPopup> {
   int _myRating = 0;
   final _controller = TextEditingController();
-  // ✅ 기기 ID를 한 번만 로드해서 보관
   String? _myDeviceId;
+  File? _image; // ← 추가
 
   @override
   void initState() {
@@ -40,6 +42,13 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
     super.dispose();
   }
 
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+        source: ImageSource.gallery, imageQuality: 80, maxWidth: 1200);
+    if (picked != null) setState(() => _image = File(picked.path));
+  }
+
   Future<void> _submit() async {
     if (_myRating == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -53,11 +62,15 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
           content: _controller.text.trim().isEmpty
               ? null
               : _controller.text.trim(),
+          image: _image, // ← 추가
         );
     if (!mounted) return;
     if (ok) {
       ref.invalidate(toiletDetailProvider(widget.toiletId));
-      setState(() => _myRating = 0);
+      setState(() {
+        _myRating = 0;
+        _image = null;
+      });
       _controller.clear();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('리뷰가 등록되었습니다.')),
@@ -89,7 +102,8 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
           Center(
             child: Container(
               margin: const EdgeInsets.only(top: 12),
-              width: 40, height: 4,
+              width: 40,
+              height: 4,
               decoration: BoxDecoration(
                   color: Colors.grey[300],
                   borderRadius: BorderRadius.circular(2)),
@@ -121,7 +135,7 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 별점 선택
+                  // ── 별점 선택 ──────────────────────────────────────
                   const Text('별점을 선택하세요',
                       style: TextStyle(
                           fontSize: 14,
@@ -145,7 +159,8 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
                     }),
                   ),
                   const SizedBox(height: 16),
-                  // 리뷰 입력
+
+                  // ── 리뷰 입력 ──────────────────────────────────────
                   const Text('리뷰 작성',
                       style: TextStyle(
                           fontSize: 14,
@@ -171,7 +186,74 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
                       contentPadding: const EdgeInsets.all(12),
                     ),
                   ),
+
+                  // ── 사진 첨부 (추가됨) ─────────────────────────────
+                  const SizedBox(height: 4),
+                  const Text('사진 첨부 (선택)',
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary)),
                   const SizedBox(height: 8),
+                  if (_image != null)
+                    Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.file(
+                            _image!,
+                            height: 140,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        Positioned(
+                          top: 6,
+                          right: 6,
+                          child: GestureDetector(
+                            onTap: () => setState(() => _image = null),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                  color: Colors.black54,
+                                  shape: BoxShape.circle),
+                              child: const Icon(Icons.close,
+                                  color: Colors.white, size: 16),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    GestureDetector(
+                      onTap: _pickImage,
+                      child: Container(
+                        height: 76,
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          borderRadius: BorderRadius.circular(10),
+                          border:
+                              Border.all(color: AppColors.filterBorder),
+                        ),
+                        child: const Center(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.add_photo_alternate_outlined,
+                                  size: 22, color: AppColors.textHint),
+                              SizedBox(width: 8),
+                              Text('사진 추가',
+                                  style: TextStyle(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  // ─────────────────────────────────────────────────
+
+                  const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -185,22 +267,25 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
                       ),
                       child: submitState.isLoading
                           ? const SizedBox(
-                              width: 18, height: 18,
+                              width: 18,
+                              height: 18,
                               child: CircularProgressIndicator(
                                   color: Colors.white, strokeWidth: 2))
                           : const Text('등록하기',
-                              style:
-                                  TextStyle(fontWeight: FontWeight.bold)),
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold)),
                     ),
                   ),
                   const SizedBox(height: 20),
-                  // 리뷰 목록
+
+                  // ── 리뷰 목록 ──────────────────────────────────────
                   reviewAsync.when(
                     loading: () => const Center(
                         child: CircularProgressIndicator(
                             color: AppColors.primary)),
                     error: (e, _) => const Text('리뷰를 불러오지 못했어요.',
-                        style: TextStyle(color: AppColors.textSecondary)),
+                        style:
+                            TextStyle(color: AppColors.textSecondary)),
                     data: (page) => _ReviewList(
                       reviews: page.content,
                       totalCount: page.totalElements,
@@ -218,6 +303,8 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
     );
   }
 }
+
+// ── 리뷰 목록 ─────────────────────────────────────────────────────────────
 
 class _ReviewList extends ConsumerWidget {
   final List<Review> reviews;
@@ -254,14 +341,16 @@ class _ReviewList extends ConsumerWidget {
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Center(
               child: Text('아직 리뷰가 없어요. 첫 리뷰를 남겨보세요!',
-                  style: TextStyle(color: AppColors.textHint, fontSize: 13)),
+                  style:
+                      TextStyle(color: AppColors.textHint, fontSize: 13)),
             ),
           )
         else
           ...reviews.map((r) => _ReviewCard(
                 review: r,
                 toiletId: toiletId,
-                isMyReview: myDeviceId != null && myDeviceId == r.deviceId,
+                isMyReview:
+                    myDeviceId != null && myDeviceId == r.deviceId,
               )),
       ],
     );
@@ -290,12 +379,15 @@ class _ReviewCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 상단 행: 별점 + 작성자 + 날짜 + 삭제
           Row(children: [
             Row(
               children: List.generate(
                   5,
                   (i) => Icon(
-                        i < review.rating ? Icons.star : Icons.star_border,
+                        i < review.rating
+                            ? Icons.star
+                            : Icons.star_border,
                         color: const Color(0xFFFFC107),
                         size: 14,
                       )),
@@ -313,7 +405,8 @@ class _ReviewCard extends ConsumerWidget {
             const Spacer(),
             Text(
               _formatDate(review.createdAt),
-              style: const TextStyle(fontSize: 11, color: AppColors.textHint),
+              style: const TextStyle(
+                  fontSize: 11, color: AppColors.textHint),
             ),
             if (isMyReview) ...[
               const SizedBox(width: 4),
@@ -321,7 +414,8 @@ class _ReviewCard extends ConsumerWidget {
                 onTap: () async {
                   final ok = await ref
                       .read(reviewNotifierProvider.notifier)
-                      .delete(toiletId: toiletId, reviewId: review.id);
+                      .delete(
+                          toiletId: toiletId, reviewId: review.id);
                   if (ok && context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('리뷰가 삭제되었습니다.')),
@@ -333,13 +427,30 @@ class _ReviewCard extends ConsumerWidget {
               ),
             ],
           ]),
-          if (review.content != null && review.content!.isNotEmpty) ...[
+          // 텍스트 내용
+          if (review.content != null &&
+              review.content!.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(review.content!,
                 style: const TextStyle(
                     fontSize: 13,
                     color: AppColors.textPrimary,
                     height: 1.4)),
+          ],
+          // 리뷰 이미지 표시 (추가됨)
+          if (review.imageUrl != null &&
+              review.imageUrl!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                review.imageUrl!,
+                height: 130,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
           ],
         ],
       ),

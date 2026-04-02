@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:dio/dio.dart';
 import '../model/review.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/constants/api_constants.dart';
@@ -13,19 +16,37 @@ class ReviewRepository {
     return ReviewPage.fromJson(res.data['data'] as Map<String, dynamic>);
   }
 
+  /// multipart/form-data 방식으로 변경
+  /// `data` 파트: JSON, `image` 파트: 파일 (선택)
   Future<Review> createReview({
     required int toiletId,
     required String deviceId,
     required int rating,
     String? content,
+    File? image,              // ← 추가된 사진 파트
   }) async {
+    final dataMap = <String, dynamic>{
+      'deviceId': deviceId,
+      'rating': rating,
+      if (content != null && content.isNotEmpty) 'content': content,
+    };
+
+    final formData = FormData.fromMap({
+      'data': MultipartFile.fromString(
+        jsonEncode(dataMap),
+        contentType: DioMediaType('application', 'json'),
+      ),
+      if (image != null)
+        'image': await MultipartFile.fromFile(
+          image.path,
+          filename: image.path.split('/').last,
+        ),
+    });
+
     final res = await _dio.post(
       ApiConstants.reviews(toiletId),
-      data: {
-        'deviceId': deviceId,
-        'rating': rating,
-        if (content != null && content.isNotEmpty) 'content': content,
-      },
+      data: formData,
+      options: Options(contentType: 'multipart/form-data'),
     );
     return Review.fromJson(res.data['data'] as Map<String, dynamic>);
   }
