@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +20,59 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   GoogleMapController? _ctrl;
   int? _selectedId;
   Set<Marker> _markers = {};
+  Set<Circle> _circles = {};
+
+  BitmapDescriptor? _markerOpen;
+  BitmapDescriptor? _markerNight;
+  BitmapDescriptor? _markerClosed;
+
+  @override
+  void initState() {
+    super.initState();
+    _createMarkerIcons();
+  }
+
+  Future<void> _createMarkerIcons() async {
+    _markerOpen   = await _circleMarker(const Color(0xFF5C3D2E));
+    _markerNight  = await _circleMarker(const Color(0xFF8B5E4A));
+    _markerClosed = await _circleMarker(const Color(0xFFBCAAA4));
+    final toilets = ref.read(nearbyToiletsProvider).value;
+    if (toilets != null && mounted) _updateMarkers(toilets);
+  }
+
+  Future<BitmapDescriptor> _circleMarker(Color color) async {
+    const size = 52.0;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    final shadowPaint = Paint()
+      ..color = Colors.black.withOpacity(0.22)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+    canvas.drawCircle(const Offset(size / 2, size / 2 + 2), size / 2 - 5, shadowPaint);
+
+    final borderPaint = Paint()..color = Colors.white;
+    canvas.drawCircle(const Offset(size / 2, size / 2), size / 2 - 5, borderPaint);
+
+    final fillPaint = Paint()..color = color;
+    canvas.drawCircle(const Offset(size / 2, size / 2), size / 2 - 8, fillPaint);
+
+    final tp = TextPainter(textDirection: TextDirection.ltr)
+      ..text = TextSpan(
+        text: String.fromCharCode(Icons.wc.codePoint),
+        style: TextStyle(
+          fontSize: 17,
+          fontFamily: Icons.wc.fontFamily,
+          color: Colors.white,
+        ),
+      )
+      ..layout();
+    tp.paint(canvas, Offset((size - tp.width) / 2, (size - tp.height) / 2 - 1));
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(size.toInt(), size.toInt());
+    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.fromBytes(bytes!.buffer.asUint8List());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,11 +83,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       next.whenData((toilets) => _updateMarkers(toilets));
     });
 
+    ref.listen(locationProvider, (_, next) {
+      next.whenData((pos) => _updateLocationCircle(pos.latitude, pos.longitude));
+    });
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          // 지도
           locationAsync.when(
             loading: () => const Center(
                 child: CircularProgressIndicator(color: AppColors.primary)),
@@ -41,8 +98,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.location_off,
-                      size: 48, color: AppColors.textSecondary),
+                  const Icon(Icons.location_off, size: 48, color: AppColors.textSecondary),
                   const SizedBox(height: 12),
                   Text(e.toString(),
                       textAlign: TextAlign.center,
@@ -59,27 +115,25 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
               markers: _markers,
+              circles: _circles,
               onMapCreated: (controller) {
                 _ctrl = controller;
                 final toilets = ref.read(nearbyToiletsProvider).value;
                 if (toilets != null) _updateMarkers(toilets);
+                _updateLocationCircle(pos.latitude, pos.longitude);
               },
               onTap: (_) {
-                if (_selectedId != null) {
-                  setState(() => _selectedId = null);
-                }
+                if (_selectedId != null) setState(() => _selectedId = null);
               },
             ),
           ),
 
-          // 상단 앱바 + 필터
           _TopBar(
             filter: filter,
             onFilterChanged: (f) =>
                 ref.read(toiletFilterProvider.notifier).state = f,
           ),
 
-          // 현재 위치 버튼 (구글맵 기본 버튼 대신 커스텀)
           Positioned(
             right: 16,
             bottom: _selectedId != null ? 320 : 100,
@@ -97,29 +151,45 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ),
           ),
 
-          // 바텀시트
           if (_selectedId != null)
             Positioned(
               left: 0, right: 0, bottom: 0,
-              child: ToiletBottomSheet(toiletId: _selectedId!),
+              child: ToiletBottomSheet(
+                toiletId: _selectedId!,
+                onDismiss: () => setState(() => _selectedId = null),
+              ),
             ),
         ],
       ),
     );
   }
 
+  void _updateLocationCircle(double lat, double lng) {
+    setState(() {
+      _circles = {
+        Circle(
+          circleId: const CircleId('user_halo'),
+          center: LatLng(lat, lng),
+          radius: 20,
+          fillColor: const Color(0xFF5C3D2E).withOpacity(0.15),
+          strokeColor: Colors.transparent,
+          strokeWidth: 0,
+        ),
+      };
+    });
+  }
+
   void _updateMarkers(List<ToiletSummary> toilets) {
     final markers = toilets.map((t) {
-      final color = switch (t.openStatus) {
-        'OPEN'  => BitmapDescriptor.hueGreen,
-        'NIGHT' => BitmapDescriptor.hueOrange,
-        _       => BitmapDescriptor.hueRed,
+      final icon = switch (t.openStatus) {
+        'OPEN'  => _markerOpen   ?? BitmapDescriptor.defaultMarker,
+        'NIGHT' => _markerNight  ?? BitmapDescriptor.defaultMarker,
+        _       => _markerClosed ?? BitmapDescriptor.defaultMarker,
       };
       return Marker(
         markerId: MarkerId(t.id.toString()),
         position: LatLng(t.lat, t.lng),
-        icon: BitmapDescriptor.defaultMarkerWithHue(color),
-        infoWindow: InfoWindow(title: t.name, snippet: t.address),
+        icon: icon,
         onTap: () => setState(() => _selectedId = t.id),
       );
     }).toSet();
@@ -127,8 +197,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     setState(() => _markers = markers);
   }
 }
-
-// ── TopBar / FilterChip (기존 코드 그대로) ────────────────────────────────
 
 class _TopBar extends StatelessWidget {
   final ToiletFilter filter;
@@ -144,7 +212,8 @@ class _TopBar extends StatelessWidget {
       children: [
         Container(
           color: AppColors.background,
-          padding: EdgeInsets.fromLTRB(16, topPadding + 8, 16, 10),
+          // ① 로고 위 여백 절반: topPadding + 4 (기존 +8)
+          padding: EdgeInsets.fromLTRB(16, topPadding + 4, 16, 10),
           child: Row(children: [
             Image.asset('assets/images/logo.png', height: 32,
                 errorBuilder: (_, __, ___) =>
@@ -218,8 +287,7 @@ class _FilterChip extends StatelessWidget {
           ],
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon,
-              size: 14,
+          Icon(icon, size: 14,
               color: isActive ? Colors.white : AppColors.textSecondary),
           const SizedBox(width: 6),
           Text(label,

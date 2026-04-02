@@ -42,7 +42,7 @@ class _BottomNav extends StatelessWidget {
   static const _items = [
     (icon: Icons.map,       label: '지도'),
     (icon: Icons.favorite,  label: '즐겨찾기'),
-    (icon: Icons.grid_view, label: '제보'),
+    (icon: Icons.article_outlined, label: '제보 게시판'),
     (icon: Icons.settings,  label: '설정'),
   ];
 
