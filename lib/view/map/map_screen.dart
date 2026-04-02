@@ -33,7 +33,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Future<void> _loadMarkerIcon() async {
     try {
       _markerIcon = await BitmapDescriptor.fromAssetImage(
-        const ImageConfiguration(size: Size(3, 3)),
+        const ImageConfiguration(size: Size(90, 90)),
         'assets/images/marker.png',
       );
     } catch (_) {

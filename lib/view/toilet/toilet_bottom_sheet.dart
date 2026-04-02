@@ -24,6 +24,10 @@ class _ToiletBottomSheetState extends ConsumerState<ToiletBottomSheet>
   late final Animation<Offset> _slideAnim;
   late final Animation<double> _fadeAnim;
 
+  // 드래그 관련
+  double _dragOffset = 0;
+  bool _isDragging = false;
+
   @override
   void initState() {
     super.initState();
@@ -58,32 +62,57 @@ class _ToiletBottomSheetState extends ConsumerState<ToiletBottomSheet>
       position: _slideAnim,
       child: FadeTransition(
         opacity: _fadeAnim,
-        child: GestureDetector(
-          onVerticalDragEnd: (d) {
-            if ((d.primaryVelocity ?? 0) > 300) _dismiss();
-          },
-          child: Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              boxShadow: [
-                BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))
-              ],
-            ),
-            child: detailAsync.when(
-              loading: () => const SizedBox(
-                height: 180,
-                child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
+        child: Transform.translate(
+          offset: Offset(0, _dragOffset.clamp(0, double.infinity)),
+          child: GestureDetector(
+            onVerticalDragStart: (_) {
+              setState(() => _isDragging = true);
+            },
+            onVerticalDragUpdate: (d) {
+              setState(() {
+                _dragOffset += d.delta.dy;
+              });
+            },
+            onVerticalDragEnd: (d) {
+              final velocity = d.primaryVelocity ?? 0;
+              // 100px 이상 내렸거나, 빠르게 아래로 스와이프하면 닫기
+              if (_dragOffset > 100 || velocity > 400) {
+                _dismiss();
+              } else {
+                // 원위치 복귀
+                setState(() {
+                  _dragOffset = 0;
+                  _isDragging = false;
+                });
+              }
+            },
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 10,
+                      offset: Offset(0, -2))
+                ],
               ),
-              error: (e, _) => SizedBox(
-                height: 180,
-                child: Center(
-                  child: Text('불러오지 못했어요.\n$e',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: AppColors.textSecondary)),
+              child: detailAsync.when(
+                loading: () => const SizedBox(
+                  height: 180,
+                  child:
+                      Center(child: CircularProgressIndicator(color: AppColors.primary)),
                 ),
+                error: (e, _) => SizedBox(
+                  height: 180,
+                  child: Center(
+                    child: Text('불러오지 못했어요.\n$e',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppColors.textSecondary)),
+                  ),
+                ),
+                data: (detail) => _Content(detail: detail, onDismiss: _dismiss),
               ),
-              data: (detail) => _Content(detail: detail, onDismiss: _dismiss),
             ),
           ),
         ),
@@ -112,9 +141,14 @@ class _Content extends ConsumerWidget {
     final isFav = favorites.any((f) => f.id == detail.id);
 
     final summary = ToiletSummary(
-      id: detail.id, name: detail.name, address: detail.address,
-      lat: detail.lat, lng: detail.lng, openStatus: detail.openStatus,
-      isDisabled: detail.isDisabled, isGenderSep: detail.isGenderSep,
+      id: detail.id,
+      name: detail.name,
+      address: detail.address,
+      lat: detail.lat,
+      lng: detail.lng,
+      openStatus: detail.openStatus,
+      isDisabled: detail.isDisabled,
+      isGenderSep: detail.isGenderSep,
     );
 
     return SafeArea(
@@ -125,9 +159,11 @@ class _Content extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 핸들
-            Center(child: Container(
-              width: 40, height: 4,
+            // 핸들 (드래그 가능 표시)
+            Center(
+                child: Container(
+              width: 40,
+              height: 4,
               decoration: BoxDecoration(
                   color: Colors.grey[300],
                   borderRadius: BorderRadius.circular(2)),
@@ -165,27 +201,32 @@ class _Content extends ConsumerWidget {
                                       color: AppColors.textSecondary)),
                             GestureDetector(
                               onTap: () => _openReview(context),
-                              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                const Icon(Icons.star, color: Color(0xFFFFC107), size: 16),
-                                const SizedBox(width: 2),
-                                Text(detail.ratingDisplay,
-                                    style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.textPrimary)),
-                                const SizedBox(width: 2),
-                                Text('(${detail.reviewCount})',
-                                    style: const TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.textSecondary)),
-                              ]),
+                              child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.star,
+                                        color: Color(0xFFFFC107), size: 16),
+                                    const SizedBox(width: 2),
+                                    Text(detail.ratingDisplay,
+                                        style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textPrimary)),
+                                    const SizedBox(width: 2),
+                                    Text('(${detail.reviewCount})',
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.textSecondary)),
+                                  ]),
                             ),
                             GestureDetector(
-                              onTap: () =>
-                                  ref.read(favoriteProvider.notifier).toggle(summary),
+                              onTap: () => ref
+                                  .read(favoriteProvider.notifier)
+                                  .toggle(summary),
                               child: Icon(
                                 isFav ? Icons.favorite : Icons.favorite_border,
-                                color: isFav ? Colors.red : AppColors.textHint,
+                                color:
+                                    isFav ? Colors.red : AppColors.textHint,
                                 size: 20,
                               ),
                             ),
@@ -203,7 +244,9 @@ class _Content extends ConsumerWidget {
                         if (detail.isDisabled || detail.isGenderSep)
                           Row(children: [
                             if (detail.isDisabled) ...[
-                              _TagChip(icon: Icons.accessible, label: '장애인 화장실'),
+                              _TagChip(
+                                  icon: Icons.accessible,
+                                  label: '장애인 화장실'),
                               const SizedBox(width: 8),
                             ],
                             if (detail.isGenderSep)
