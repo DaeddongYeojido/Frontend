@@ -40,10 +40,10 @@ class _BottomNav extends StatelessWidget {
   const _BottomNav({required this.currentIndex, required this.onTap});
 
   static const _items = [
-    (icon: Icons.map,       label: 'MAP'),
-    (icon: Icons.favorite,  label: 'FAVORITES'),
-    (icon: Icons.grid_view, label: 'REPORT'),
-    (icon: Icons.settings,  label: 'SETTINGS'),
+    (icon: Icons.map,       label: '지도'),
+    (icon: Icons.favorite,  label: '즐겨찾기'),
+    (icon: Icons.grid_view, label: '제보'),
+    (icon: Icons.settings,  label: '설정'),
   ];
 
   @override
