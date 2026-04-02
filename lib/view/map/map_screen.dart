@@ -1,5 +1,5 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
@@ -21,6 +21,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   int? _selectedId;
   Set<Marker> _markers = {};
   Set<Circle> _circles = {};
+
   BitmapDescriptor? _markerIcon;
 
   @override
@@ -29,18 +30,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     _loadMarkerIcon();
   }
 
-  /// ② assets/images/marker.png 를 마커 아이콘으로 로드
   Future<void> _loadMarkerIcon() async {
     try {
-      // 마커 크기를 80 logical px 수준으로 스케일
-      final icon = await BitmapDescriptor.fromAssetImage(
-        const ImageConfiguration(size: Size(48, 48)),
+      _markerIcon = await BitmapDescriptor.fromAssetImage(
+        const ImageConfiguration(size: Size(3, 3)),
         'assets/images/marker.png',
       );
-      _markerIcon = icon;
     } catch (_) {
-      // 실패 시 기본 마커 사용
-      _markerIcon = BitmapDescriptor.defaultMarker;
     }
     final toilets = ref.read(nearbyToiletsProvider).value;
     if (toilets != null && mounted) _updateMarkers(toilets);
@@ -123,31 +119,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ),
           ),
 
-          // ③ 바텀시트 슬라이드 애니메이션
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 320),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeInCubic,
-            transitionBuilder: (child, animation) {
-              return SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0, 1),
-                  end: Offset.zero,
-                ).animate(animation),
-                child: child,
-              );
-            },
-            child: _selectedId != null
-                ? Positioned(
-                    key: ValueKey(_selectedId),
-                    left: 0, right: 0, bottom: 0,
-                    child: ToiletBottomSheet(
-                      toiletId: _selectedId!,
-                      onDismiss: () => setState(() => _selectedId = null),
-                    ),
-                  )
-                : const SizedBox.shrink(key: ValueKey('empty')),
-          ),
+          if (_selectedId != null)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: ToiletBottomSheet(
+                toiletId: _selectedId!,
+                onDismiss: () => setState(() => _selectedId = null),
+              ),
+            ),
         ],
       ),
     );
@@ -182,7 +163,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 }
 
-// ── TopBar ────────────────────────────────────────────
+// ── TopBar ────────────────────────────────────────────────
 
 class _TopBar extends StatelessWidget {
   final ToiletFilter filter;
@@ -198,9 +179,7 @@ class _TopBar extends StatelessWidget {
       children: [
         Container(
           color: AppColors.background,
-          // ① topPadding 자체가 상태바 높이 = 로고와 기기 사이 여백 없이 바로 붙임
-          // 기존 + 4 추가 여백 제거
-          padding: EdgeInsets.fromLTRB(16, topPadding, 16, 10),
+          padding: EdgeInsets.fromLTRB(16, topPadding + 4, 16, 10),
           child: Row(children: [
             Image.asset('assets/images/logo.png', height: 32,
                 errorBuilder: (_, __, ___) =>
