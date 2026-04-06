@@ -2,18 +2,40 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'core/theme/app_colors.dart';
 import 'data/model/favorite_toilet.dart';
 import 'data/repository/favorite_repository.dart';
 import 'view/main_shell.dart';
 
+// 백그라운드 FCM 핸들러 (top-level 함수여야 함)
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  // 백그라운드 수신 시 별도 처리 필요하면 여기에 추가
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 상태바 스타일
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
   ));
+
+  // Firebase 초기화
+  await Firebase.initializeApp();
+
+  // 백그라운드 메시지 �핸들러 등록
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+  // 포그라운드 알림 표시 설정 (iOS)
+  await FirebaseMessaging.instance
+      .setForegroundNotificationPresentationOptions(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
 
   await Hive.initFlutter();
   Hive.registerAdapter(FavoriteToiletAdapter());
@@ -64,7 +86,6 @@ class _SplashGateState extends State<_SplashGate>
     );
     _fade = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
 
-    // 1.2초 후 페이드 아웃 → 메인으로 전환
     Future.delayed(const Duration(milliseconds: 1200), () {
       if (!mounted) return;
       _ctrl.forward().then((_) {
@@ -103,7 +124,6 @@ class _SplashScreen extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ddong.png 로고 (가운데 살짝 위)
             Transform.translate(
               offset: const Offset(0, -20),
               child: Image.asset(
