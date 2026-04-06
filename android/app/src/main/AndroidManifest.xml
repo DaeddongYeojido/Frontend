@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <!-- 인터넷 권한 -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 푸시 알림 권한 (Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <application
         android:label="대똥여지도"
@@ -28,9 +30,23 @@
             </intent-filter>
         </activity>
 
+        <!-- Google Maps API Key -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyBcRsiM8ZSbcoqL40RS_BEzJR6w5Cw_PGo"/>
+
+        <meta-data
+            android:name="com.google.android.maps.v2.RENDERER"
+            android:value="latest"/>
+
+        <!-- FCM 백그라운드 알림 처리 -->
+        <service
+            android:name="com.google.firebase.messaging.FirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT"/>
+            </intent-filter>
+        </service>
 
         <meta-data
             android:name="flutterEmbedding"

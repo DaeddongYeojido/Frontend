@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "311419084669",
+    "project_id": "daeddong-f586f",
+    "storage_bucket": "daeddong-f586f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:311419084669:android:9db7b8458a1fe7f1bf3614",
+        "android_client_info": {
+          "package_name": "com.daeddong.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCtglJLIDmvR4HZRtRgN9-MBKsvgPDeEwY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
