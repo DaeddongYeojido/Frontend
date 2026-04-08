@@ -56,16 +56,19 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
       );
       return;
     }
-    final ok = await ref.read(reviewNotifierProvider.notifier).submit(
-          toiletId: widget.toiletId,
-          rating: _myRating,
-          content: _controller.text.trim().isEmpty
-              ? null
-              : _controller.text.trim(),
-          image: _image,
-        );
+
+    // String? 반환: null이면 성공, 문자열이면 에러 메시지
+    final error = await ref.read(reviewNotifierProvider.notifier).submit(
+      toiletId: widget.toiletId,
+      rating: _myRating,
+      content: _controller.text.trim().isEmpty
+          ? null
+          : _controller.text.trim(),
+      image: _image,
+    );
+
     if (!mounted) return;
-    if (ok) {
+    if (error == null) {
       ref.invalidate(toiletDetailProvider(widget.toiletId));
       setState(() {
         _myRating = 0;
@@ -77,8 +80,8 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('이미 리뷰를 작성하셨거나 오류가 발생했어요.'),
+        SnackBar(
+          content: Text(error), // 백엔드 에러 메시지 그대로 표시
           backgroundColor: AppColors.closed,
         ),
       );
@@ -98,7 +101,6 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
       ),
       child: Column(
         children: [
-          // 핸들
           Center(
             child: Container(
               margin: const EdgeInsets.only(top: 12),
@@ -109,7 +111,6 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
                   borderRadius: BorderRadius.circular(2)),
             ),
           ),
-          // 헤더
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 14, 8, 0),
             child: Row(children: [
@@ -135,7 +136,6 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── 별점 선택 ──────────────────────────────────────
                   const Text('별점을 선택하세요',
                       style: TextStyle(
                           fontSize: 14,
@@ -160,7 +160,6 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
                   ),
                   const SizedBox(height: 16),
 
-                  // ── 리뷰 입력 ──────────────────────────────────────
                   const Text('리뷰 작성',
                       style: TextStyle(
                           fontSize: 14,
@@ -182,12 +181,11 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
                       focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide:
-                              const BorderSide(color: AppColors.primary)),
+                          const BorderSide(color: AppColors.primary)),
                       contentPadding: const EdgeInsets.all(12),
                     ),
                   ),
 
-                  // ── 사진 첨부 ─────────────────────────────
                   const SizedBox(height: 4),
                   const Text('사진 첨부 (선택)',
                       style: TextStyle(
@@ -232,8 +230,7 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
                         decoration: BoxDecoration(
                           color: AppColors.background,
                           borderRadius: BorderRadius.circular(10),
-                          border:
-                              Border.all(color: AppColors.filterBorder),
+                          border: Border.all(color: AppColors.filterBorder),
                         ),
                         child: const Center(
                           child: Row(
@@ -266,25 +263,22 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
                       ),
                       child: submitState.isLoading
                           ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                  color: Colors.white, strokeWidth: 2))
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2))
                           : const Text('등록하기',
-                              style:
-                                  TextStyle(fontWeight: FontWeight.bold)),
+                          style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                   const SizedBox(height: 20),
 
-                  // ── 리뷰 목록 ──────────────────────────────────────
                   reviewAsync.when(
                     loading: () => const Center(
                         child: CircularProgressIndicator(
                             color: AppColors.primary)),
                     error: (e, _) => const Text('리뷰를 불러오지 못했어요.',
-                        style:
-                            TextStyle(color: AppColors.textSecondary)),
+                        style: TextStyle(color: AppColors.textSecondary)),
                     data: (page) => _ReviewList(
                       reviews: page.content,
                       totalCount: page.totalElements,
@@ -320,11 +314,10 @@ class _ReviewList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 내 리뷰 / 다른 리뷰 분리
     final myReviews =
-        reviews.where((r) => myDeviceId != null && r.deviceId == myDeviceId).toList();
+    reviews.where((r) => myDeviceId != null && r.deviceId == myDeviceId).toList();
     final otherReviews =
-        reviews.where((r) => myDeviceId == null || r.deviceId != myDeviceId).toList();
+    reviews.where((r) => myDeviceId == null || r.deviceId != myDeviceId).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -342,31 +335,28 @@ class _ReviewList extends ConsumerWidget {
         ]),
         const SizedBox(height: 8),
 
-        // 내 리뷰 먼저
         if (myReviews.isNotEmpty) ...[
           ...myReviews.map((r) => _ReviewCard(
-                review: r,
-                toiletId: toiletId,
-                isMyReview: true,
-              )),
+            review: r,
+            toiletId: toiletId,
+            isMyReview: true,
+          )),
         ],
 
-        // 다른 리뷰
         if (otherReviews.isEmpty && myReviews.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Center(
               child: Text('아직 리뷰가 없어요. 첫 리뷰를 남겨보세요!',
-                  style:
-                      TextStyle(color: AppColors.textHint, fontSize: 13)),
+                  style: TextStyle(color: AppColors.textHint, fontSize: 13)),
             ),
           )
         else
           ...otherReviews.map((r) => _ReviewCard(
-                review: r,
-                toiletId: toiletId,
-                isMyReview: false,
-              )),
+            review: r,
+            toiletId: toiletId,
+            isMyReview: false,
+          )),
       ],
     );
   }
@@ -388,24 +378,6 @@ class _ReviewCard extends ConsumerStatefulWidget {
 }
 
 class _ReviewCardState extends ConsumerState<_ReviewCard> {
-  bool _isEditing = false;
-  late TextEditingController _editController;
-  late int _editRating;
-
-  @override
-  void initState() {
-    super.initState();
-    _editController =
-        TextEditingController(text: widget.review.content ?? '');
-    _editRating = widget.review.rating;
-  }
-
-  @override
-  void dispose() {
-    _editController.dispose();
-    super.dispose();
-  }
-
   Future<void> _delete(BuildContext context) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -418,19 +390,27 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
               child: const Text('취소')),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('삭제',
-                style: TextStyle(color: AppColors.closed)),
+            child: const Text('삭제', style: TextStyle(color: AppColors.closed)),
           ),
         ],
       ),
     );
     if (confirm == true) {
-      final ok = await ref
+      // String? 반환: null이면 성공, 문자열이면 에러 메시지
+      final error = await ref
           .read(reviewNotifierProvider.notifier)
           .delete(toiletId: widget.toiletId, reviewId: widget.review.id);
-      if (ok && context.mounted) {
+      if (!context.mounted) return;
+      if (error == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('리뷰가 삭제되었습니다.')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error),
+            backgroundColor: AppColors.closed,
+          ),
         );
       }
     }
@@ -454,11 +434,9 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 내 리뷰 태그
             if (widget.isMyReview) ...[
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: AppColors.primary,
                   borderRadius: BorderRadius.circular(20),
@@ -472,18 +450,17 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
               const SizedBox(height: 8),
             ],
 
-            // 별점 + 날짜
             Row(children: [
               Row(
                 children: List.generate(
                     5,
-                    (i) => Icon(
-                          i < widget.review.rating
-                              ? Icons.star
-                              : Icons.star_border,
-                          color: const Color(0xFFFFC107),
-                          size: 14,
-                        )),
+                        (i) => Icon(
+                      i < widget.review.rating
+                          ? Icons.star
+                          : Icons.star_border,
+                      color: const Color(0xFFFFC107),
+                      size: 14,
+                    )),
               ),
               const SizedBox(width: 8),
               Text(
@@ -498,12 +475,10 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
               const Spacer(),
               Text(
                 _formatDate(widget.review.createdAt),
-                style: const TextStyle(
-                    fontSize: 11, color: AppColors.textHint),
+                style: const TextStyle(fontSize: 11, color: AppColors.textHint),
               ),
             ]),
 
-            // 텍스트 내용
             if (widget.review.content != null &&
                 widget.review.content!.isNotEmpty) ...[
               const SizedBox(height: 6),
@@ -514,7 +489,6 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
                       height: 1.4)),
             ],
 
-            // 이미지
             if (widget.review.imageUrl != null &&
                 widget.review.imageUrl!.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -530,7 +504,6 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
               ),
             ],
 
-            // 내 리뷰: 수정/삭제 아이콘 (오른쪽 아래)
             if (widget.isMyReview) ...[
               const SizedBox(height: 8),
               Row(
@@ -538,7 +511,6 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
                 children: [
                   GestureDetector(
                     onTap: () {
-                      // 수정은 현재 삭제 후 재작성 방식 안내
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                             content: Text('기존 리뷰를 삭제 후 새로 작성해주세요.')),

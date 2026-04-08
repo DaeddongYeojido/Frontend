@@ -32,7 +32,7 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
   bool _mapExpanded = false;
   GoogleMapController? _mapController;
 
-  static const _initialPosition = LatLng(37.5665, 126.9780); // 서울 시청
+  static const _initialPosition = LatLng(37.5665, 126.9780);
 
   @override
   void dispose() {
@@ -72,31 +72,32 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
       return;
     }
 
-    final ok = await ref.read(reportNotifierProvider.notifier).submit(
-          name: _nameCtrl.text.trim(),
-          address: _addressCtrl.text.trim(),
-          lat: _lat!,
-          lng: _lng!,
-          openStatus: _openStatus,
-          isDisabled: _isDisabled,
-          isGenderSep: _isGenderSep,
-          openHours: _openHoursCtrl.text.trim().isEmpty
-              ? null
-              : _openHoursCtrl.text.trim(),
-          memo: _memoCtrl.text.trim().isEmpty ? null : _memoCtrl.text.trim(),
-          image: _image,
-        );
+    // String? 반환: null이면 성공, 문자열이면 에러 메시지
+    final error = await ref.read(reportNotifierProvider.notifier).submit(
+      name: _nameCtrl.text.trim(),
+      address: _addressCtrl.text.trim(),
+      lat: _lat!,
+      lng: _lng!,
+      openStatus: _openStatus,
+      isDisabled: _isDisabled,
+      isGenderSep: _isGenderSep,
+      openHours: _openHoursCtrl.text.trim().isEmpty
+          ? null
+          : _openHoursCtrl.text.trim(),
+      memo: _memoCtrl.text.trim().isEmpty ? null : _memoCtrl.text.trim(),
+      image: _image,
+    );
 
     if (!mounted) return;
-    if (ok) {
+    if (error == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('제보가 등록되었습니다. 검토 후 반영될 예정이에요.')),
       );
       Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('제보 등록에 실패했어요. 다시 시도해주세요.'),
+        SnackBar(
+          content: Text(error), // 백엔드 에러 메시지 그대로 표시
           backgroundColor: AppColors.closed,
         ),
       );
@@ -130,7 +131,6 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
           children: [
-            // ── 기본 정보 ─────────────────────────────────────────────
             _SectionHeader(label: '기본 정보', required: true),
             const SizedBox(height: 10),
             _Field(controller: _nameCtrl, label: '화장실 이름',
@@ -139,7 +139,6 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
             _Field(controller: _addressCtrl, label: '주소',
                 hint: '예: 서울특별시 마포구 양화로 160', required: true),
 
-            // ── 위치 설정 ─────────────────────────────────────────────
             const SizedBox(height: 20),
             _SectionHeader(label: '위치 설정 (지도에서 핀 찍기)', required: true),
             const SizedBox(height: 8),
@@ -224,7 +223,6 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
               ),
             ),
 
-            // ── 운영 정보 ─────────────────────────────────────────────
             const SizedBox(height: 20),
             _SectionHeader(label: '운영 정보', required: false),
             const SizedBox(height: 10),
@@ -266,7 +264,6 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
             _Field(controller: _openHoursCtrl, label: '운영 시간',
                 hint: '예: 06:00~22:00', required: false),
 
-            // ── 메모 ──────────────────────────────────────────────────
             const SizedBox(height: 20),
             _SectionHeader(label: '메모', required: false),
             const SizedBox(height: 10),
@@ -292,7 +289,6 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
               ),
             ),
 
-            // ── 사진 첨부 ─────────────────────────────────────────────
             const SizedBox(height: 12),
             _SectionHeader(label: '사진 첨부', required: false),
             const SizedBox(height: 10),
@@ -302,7 +298,6 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
               onRemove: () => setState(() => _image = null),
             ),
 
-            // ── 제출 ──────────────────────────────────────────────────
             const SizedBox(height: 28),
             SizedBox(
               width: double.infinity,
@@ -318,12 +313,12 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
                 ),
                 child: submitState.isLoading
                     ? const SizedBox(
-                        width: 22, height: 22,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2.5))
+                    width: 22, height: 22,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2.5))
                     : const Text('제보 등록하기',
-                        style: TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.bold)),
+                    style: TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.bold)),
               ),
             ),
           ],
@@ -341,19 +336,19 @@ class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.label, required this.required});
   @override
   Widget build(BuildContext context) => Row(children: [
-        Text(label,
-            style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary)),
-        if (required) ...[
-          const SizedBox(width: 4),
-          const Text('*', style: TextStyle(color: AppColors.closed, fontSize: 14)),
-        ] else ...[
-          const SizedBox(width: 6),
-          const Text('(선택)', style: TextStyle(fontSize: 12, color: AppColors.textHint)),
-        ],
-      ]);
+    Text(label,
+        style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textPrimary)),
+    if (required) ...[
+      const SizedBox(width: 4),
+      const Text('*', style: TextStyle(color: AppColors.closed, fontSize: 14)),
+    ] else ...[
+      const SizedBox(width: 6),
+      const Text('(선택)', style: TextStyle(fontSize: 12, color: AppColors.textHint)),
+    ],
+  ]);
 }
 
 class _Field extends StatelessWidget {
@@ -362,29 +357,29 @@ class _Field extends StatelessWidget {
   final String hint;
   final bool required;
   const _Field({required this.controller, required this.label,
-      required this.hint, required this.required});
+    required this.hint, required this.required});
   @override
   Widget build(BuildContext context) => TextFormField(
-        controller: controller,
-        validator: required
-            ? (v) => (v == null || v.trim().isEmpty) ? '$label을(를) 입력해주세요.' : null
-            : null,
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 13),
-          labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.filterBorder)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.primary)),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.filterBorder)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        ),
-      );
+    controller: controller,
+    validator: required
+        ? (v) => (v == null || v.trim().isEmpty) ? '$label을(를) 입력해주세요.' : null
+        : null,
+    decoration: InputDecoration(
+      labelText: label,
+      hintText: hint,
+      hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 13),
+      labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.filterBorder)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.primary)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.filterBorder)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    ),
+  );
 }
 
 class _ChoiceRow<T> extends StatelessWidget {
@@ -394,35 +389,35 @@ class _ChoiceRow<T> extends StatelessWidget {
   final ValueChanged<T> onSelect;
   final List<Color> activeColors;
   const _ChoiceRow({required this.options, required this.labels,
-      required this.selected, required this.onSelect, required this.activeColors});
+    required this.selected, required this.onSelect, required this.activeColors});
   @override
   Widget build(BuildContext context) => Row(
-        children: List.generate(options.length, (i) {
-          final active = selected == options[i];
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onSelect(options[i]),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                margin: EdgeInsets.only(right: i < options.length - 1 ? 6 : 0),
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: active ? activeColors[i].withOpacity(0.12) : Colors.white,
-                  border: Border.all(
-                      color: active ? activeColors[i] : AppColors.filterBorder),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(labels[i],
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: active ? activeColors[i] : AppColors.textSecondary)),
-              ),
+    children: List.generate(options.length, (i) {
+      final active = selected == options[i];
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => onSelect(options[i]),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            margin: EdgeInsets.only(right: i < options.length - 1 ? 6 : 0),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: active ? activeColors[i].withOpacity(0.12) : Colors.white,
+              border: Border.all(
+                  color: active ? activeColors[i] : AppColors.filterBorder),
+              borderRadius: BorderRadius.circular(10),
             ),
-          );
-        }),
+            child: Text(labels[i],
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: active ? activeColors[i] : AppColors.textSecondary)),
+          ),
+        ),
       );
+    }),
+  );
 }
 
 class _ToggleChip extends StatelessWidget {
@@ -431,7 +426,7 @@ class _ToggleChip extends StatelessWidget {
   final bool? value;
   final ValueChanged<bool?> onToggle;
   const _ToggleChip({required this.icon, required this.label,
-      required this.value, required this.onToggle});
+    required this.value, required this.onToggle});
   @override
   Widget build(BuildContext context) {
     final isOn = value == true;

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/model/crowd_vote.dart';
 import '../data/repository/crowd_repository.dart';
 import '../core/utils/device_id_util.dart';
+import '../core/network/dio_client.dart';
 
 final crowdRepositoryProvider = Provider((ref) => CrowdRepository());
 
@@ -9,24 +10,27 @@ class CrowdVoteNotifier extends AsyncNotifier<Map<int, CrowdVote>> {
   @override
   Future<Map<int, CrowdVote>> build() async => {};
 
-  Future<void> vote(int toiletId, String level) async {
+  Future<String?> vote(int toiletId, String level) async {
     final previous = state.value ?? {};
     state = const AsyncLoading();
 
     final deviceId = await DeviceIdUtil.getDeviceId();
     final result = await AsyncValue.guard(
-      () => ref.read(crowdRepositoryProvider)
+          () => ref
+          .read(crowdRepositoryProvider)
           .vote(toiletId: toiletId, deviceId: deviceId, level: level),
     );
 
-    result.when(
+    return result.when(
       data: (vote) {
         state = AsyncData({...previous, toiletId: vote});
+        return null; // 성공
       },
       error: (e, st) {
         state = AsyncData(previous);
+        return extractErrorMessage(e, fallback: '혼잡도 투표에 실패했습니다.');
       },
-      loading: () {},
+      loading: () => null,
     );
   }
 
@@ -37,6 +41,6 @@ class CrowdVoteNotifier extends AsyncNotifier<Map<int, CrowdVote>> {
 }
 
 final crowdVoteProvider =
-    AsyncNotifierProvider<CrowdVoteNotifier, Map<int, CrowdVote>>(
+AsyncNotifierProvider<CrowdVoteNotifier, Map<int, CrowdVote>>(
   CrowdVoteNotifier.new,
 );
