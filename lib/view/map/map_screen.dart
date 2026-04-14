@@ -570,7 +570,7 @@ class _PaperOverlayPainterState extends State<_PaperOverlayPainter> {
 
         if (marker.isRescued) {
           return Positioned(
-            left: pos.dx - 40,
+            left: pos.dx - 33,
             top: pos.dy - 70,
             child: Container(
               padding:
@@ -628,7 +628,7 @@ class _ToiletPaperFountain extends StatelessWidget {
           final x = sin(angle) * dist;
           final y = cos(angle) * dist * 0.6 - t * t * 25;
           final opacity = (1.0 - t * 0.8).clamp(0.2, 1.0);
-          final size = (1.0 - t * 0.4).clamp(0.5, 1.0) * 32;
+          final size = (1.0 - t * 0.4).clamp(0.5, 1.0) * 42;
 
           return Positioned(
             bottom: 8 + y,
@@ -846,7 +846,7 @@ class _TopBar extends StatelessWidget {
       children: [
         Container(
           color: AppColors.background,
-          padding: EdgeInsets.fromLTRB(16, topPadding + 4, 16, 10),
+          padding: EdgeInsets.fromLTRB(16, topPadding + 16, 16, 10),
           child: Row(children: [
             Image.asset('assets/images/logo.png',
                 height: 32,

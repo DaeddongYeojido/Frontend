@@ -1,7 +1,7 @@
 class ApiConstants {
-  static const String baseUrl = 'http://192.168.219.104:8080';
+  static const String baseUrl = 'https://daeddong.duckdns.org';
 
-  //'http://10.0.2.2:8080' 192.168.219.104
+  //'http://10.0.2.2:8080' 192.168.219.104, https://daeddong.duckdns.org
 
   // 화장실
   static const String nearby = '/api/v1/toilets/nearby';
