@@ -158,7 +158,7 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
                 ]),
               ),
             GestureDetector(
-              onTap: () => setState(() => _mapExpanded = !_mapExpanded),
+              onTap: _mapExpanded ? null : () => setState(() => _mapExpanded = true),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
                 height: _mapExpanded ? 300 : 130,
@@ -203,6 +203,26 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
                                         backgroundColor: Colors.white)),
                               ],
                             ),
+                          ),
+                        ),
+                      ),
+                    if (_mapExpanded)
+                      Positioned(
+                        top: 8, right: 8,
+                        child: GestureDetector(
+                          onTap: () => setState(() => _mapExpanded = false),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 4)],
+                            ),
+                            child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                              Icon(Icons.expand_less, size: 14, color: AppColors.textSecondary),
+                              SizedBox(width: 2),
+                              Text('접기', style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+                            ]),
                           ),
                         ),
                       ),
