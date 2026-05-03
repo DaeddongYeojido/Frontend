@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../core/theme/app_colors.dart';
 import '../../provider/report_provider.dart';
 
@@ -339,6 +340,8 @@ class _MapPickerPageState extends State<_MapPickerPage> {
   GoogleMapController? _ctrl;
   LatLng? _selected;
   Marker? _marker;
+  LatLng _initialTarget = _defaultPosition;
+  bool _loadingLocation = true;
 
   @override
   void initState() {
@@ -346,8 +349,49 @@ class _MapPickerPageState extends State<_MapPickerPage> {
     if (widget.initial != null) {
       _selected = widget.initial;
       _marker = _buildMarker(widget.initial!);
+      _initialTarget = widget.initial!;
+      _loadingLocation = false;
+    } else {
+      _fetchCurrentLocation(moveCamera: false);
     }
   }
+
+  Future<void> _fetchCurrentLocation({bool moveCamera = true}) async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+
+      LocationPermission perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+        if (perm == LocationPermission.denied) return;
+      }
+      if (perm == LocationPermission.deniedForever) return;
+
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      final target = LatLng(pos.latitude, pos.longitude);
+
+      if (!mounted) return;
+      setState(() {
+        _initialTarget = target;
+        _loadingLocation = false;
+      });
+
+      if (moveCamera) {
+        _ctrl?.animateCamera(CameraUpdate.newLatLngZoom(target, 16));
+      } else {
+        // initState에서 호출된 경우: 지도가 아직 생성 안 됐을 수 있으니
+        // onMapCreated 콜백에서 이동하도록 플래그만 세팅
+        _pendingMoveToUser = true;
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingLocation = false);
+    }
+  }
+
+  bool _pendingMoveToUser = false;
 
   Marker _buildMarker(LatLng pos) => Marker(
     markerId: const MarkerId('pin'),
@@ -372,15 +416,55 @@ class _MapPickerPageState extends State<_MapPickerPage> {
           // ── 전체화면 지도 ────────────────────────────────────────────
           GoogleMap(
             initialCameraPosition: CameraPosition(
-              target: widget.initial ?? _defaultPosition,
-              zoom: 15,
+              target: _initialTarget,
+              zoom: 16,
             ),
-            onMapCreated: (ctrl) => _ctrl = ctrl,
+            onMapCreated: (ctrl) {
+              _ctrl = ctrl;
+              if (_pendingMoveToUser) {
+                _pendingMoveToUser = false;
+                Future.delayed(const Duration(milliseconds: 300), () {
+                  _ctrl?.animateCamera(
+                    CameraUpdate.newLatLngZoom(_initialTarget, 16),
+                  );
+                });
+              }
+            },
             onTap: _onTap,
             markers: _marker != null ? {_marker!} : {},
+            myLocationEnabled: true,
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
           ),
+
+          // ── 로딩 인디케이터 (GPS 아직 못 가져온 경우) ─────────────────
+          if (_loadingLocation)
+            Positioned(
+              top: 80, left: 0, right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 6),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 14, height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 8),
+                      Text('현재 위치 불러오는 중…', style: TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
 
           // ── 상단 바 ──────────────────────────────────────────────────
           Positioned(
@@ -443,6 +527,32 @@ class _MapPickerPageState extends State<_MapPickerPage> {
                     ),
                   ],
                 ),
+              ),
+            ),
+          ),
+
+          // ── 현위치 버튼 (우측 하단) ──────────────────────────────────
+          Positioned(
+            right: 16,
+            bottom: 88,
+            child: GestureDetector(
+              onTap: () => _fetchCurrentLocation(moveCamera: true),
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.18),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.my_location,
+                    color: AppColors.primary, size: 22),
               ),
             ),
           ),
