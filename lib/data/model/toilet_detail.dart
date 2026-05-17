@@ -1,3 +1,23 @@
+// ── 태그 집계 ──────────────────────────────────────────────────────────────
+class TagSummary {
+  final String code;
+  final String label;
+  final int count;
+
+  const TagSummary({
+    required this.code,
+    required this.label,
+    required this.count,
+  });
+
+  factory TagSummary.fromJson(Map<String, dynamic> json) => TagSummary(
+    code: json['code'] as String,
+    label: json['label'] as String,
+    count: (json['count'] as num).toInt(),
+  );
+}
+
+// ── 화장실 상세 ────────────────────────────────────────────────────────────
 class ToiletDetail {
   final int id;
   final String name;
@@ -13,6 +33,7 @@ class ToiletDetail {
   final String? currentCrowd;
   final double? averageRating;
   final int reviewCount;
+  final List<TagSummary> tagSummary;
 
   const ToiletDetail({
     required this.id,
@@ -29,6 +50,7 @@ class ToiletDetail {
     this.currentCrowd,
     this.averageRating,
     this.reviewCount = 0,
+    this.tagSummary = const [],
   });
 
   factory ToiletDetail.fromJson(Map<String, dynamic> json) => ToiletDetail(
@@ -50,13 +72,15 @@ class ToiletDetail {
         ? null
         : (json['averageRating'] as num).toDouble(),
     reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
+    tagSummary: (json['tagSummary'] as List<dynamic>? ?? [])
+        .map((e) => TagSummary.fromJson(e as Map<String, dynamic>))
+        .toList(),
   );
 
   int get crowdedCount => crowdSummary['CROWDED'] ?? 0;
-  int get normalCount  => crowdSummary['NORMAL']  ?? 0;
-  int get emptyCount   => crowdSummary['EMPTY']   ?? 0;
+  int get normalCount => crowdSummary['NORMAL'] ?? 0;
+  int get emptyCount => crowdSummary['EMPTY'] ?? 0;
 
-  String get ratingDisplay => averageRating != null
-      ? averageRating!.toStringAsFixed(1)
-      : '-';
+  String get ratingDisplay =>
+      averageRating != null ? averageRating!.toStringAsFixed(1) : '-';
 }

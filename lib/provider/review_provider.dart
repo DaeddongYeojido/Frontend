@@ -7,6 +7,11 @@ import '../core/network/dio_client.dart';
 
 final reviewRepositoryProvider = Provider((ref) => ReviewRepository());
 
+/// 태그 목록 (앱 기동 후 한 번 fetch, 캐시)
+final reviewTagListProvider = FutureProvider<List<TagInfo>>((ref) async {
+  return ref.watch(reviewRepositoryProvider).getReviewTags();
+});
+
 final reviewListProvider =
 FutureProvider.family<ReviewPage, int>((ref, toiletId) async {
   return ref.watch(reviewRepositoryProvider).getReviews(toiletId);
@@ -25,6 +30,7 @@ class ReviewNotifier extends AsyncNotifier<void> {
     required int rating,
     String? content,
     File? image,
+    List<String> tags = const [],
   }) async {
     state = const AsyncLoading();
     final deviceId = await DeviceIdUtil.getDeviceId();
@@ -35,6 +41,7 @@ class ReviewNotifier extends AsyncNotifier<void> {
         rating: rating,
         content: content,
         image: image,
+        tags: tags,
       ),
     );
     state = const AsyncData(null);
