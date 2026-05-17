@@ -334,6 +334,12 @@ class _Content extends ConsumerWidget {
 
             const SizedBox(height: 14),
 
+            // ── 태그 집계 (신규) ─────────────────────────────────────────
+            if (detail.tagSummary.isNotEmpty) ...[
+              _TagSummaryRow(tagSummary: detail.tagSummary),
+              const SizedBox(height: 10),
+            ],
+
             // 🧻 휴지 요청 버튼
             SizedBox(
               width: double.infinity,
@@ -389,6 +395,74 @@ class _Content extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── 태그 집계 행 (신규) ──────────────────────────────────────────────────────
+
+class _TagSummaryRow extends StatelessWidget {
+  final List<TagSummary> tagSummary;
+  const _TagSummaryRow({required this.tagSummary});
+
+  @override
+  Widget build(BuildContext context) {
+    // count 내림차순 상위 3개 (서버에서 이미 정렬되어 오지만 방어 처리)
+    final tops = (tagSummary.toList()
+      ..sort((a, b) => b.count.compareTo(a.count)))
+        .take(3)
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '방문자 태그',
+          style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: tops.map((t) {
+            return Container(
+              padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(20),
+                border:
+                Border.all(color: AppColors.primary.withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    t.label,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${t.count}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.primary.withOpacity(0.7),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 }

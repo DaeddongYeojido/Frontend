@@ -27,6 +27,7 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
   final _controller = TextEditingController();
   String? _myDeviceId;
   File? _image;
+  final List<String> _selectedTags = []; // ← 추가
 
   @override
   void initState() {
@@ -49,6 +50,23 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
     if (picked != null) setState(() => _image = File(picked.path));
   }
 
+  // ── 태그 토글 ──────────────────────────────────────────────────────────
+  void _toggleTag(String code) {
+    setState(() {
+      if (_selectedTags.contains(code)) {
+        _selectedTags.remove(code);
+      } else {
+        if (_selectedTags.length >= 3) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('태그는 최대 3개까지 선택할 수 있어요.')),
+          );
+          return;
+        }
+        _selectedTags.add(code);
+      }
+    });
+  }
+
   Future<void> _submit() async {
     if (_myRating == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -57,7 +75,6 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
       return;
     }
 
-    // String? 반환: null이면 성공, 문자열이면 에러 메시지
     final error = await ref.read(reviewNotifierProvider.notifier).submit(
       toiletId: widget.toiletId,
       rating: _myRating,
@@ -65,6 +82,7 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
           ? null
           : _controller.text.trim(),
       image: _image,
+      tags: List.unmodifiable(_selectedTags), // ← 추가
     );
 
     if (!mounted) return;
@@ -73,6 +91,7 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
       setState(() {
         _myRating = 0;
         _image = null;
+        _selectedTags.clear(); // ← 추가
       });
       _controller.clear();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -81,7 +100,7 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(error), // 백엔드 에러 메시지 그대로 표시
+          content: Text(error),
           backgroundColor: AppColors.closed,
         ),
       );
@@ -92,6 +111,7 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
   Widget build(BuildContext context) {
     final reviewAsync = ref.watch(reviewListProvider(widget.toiletId));
     final submitState = ref.watch(reviewNotifierProvider);
+    final tagAsync = ref.watch(reviewTagListProvider); // ← 추가
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
@@ -136,6 +156,7 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ── 별점 ───────────────────────────────────────────────
                   const Text('별점을 선택하세요',
                       style: TextStyle(
                           fontSize: 14,
@@ -160,6 +181,77 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
                   ),
                   const SizedBox(height: 16),
 
+                  // ── 태그 선택 (신규) ────────────────────────────────────
+                  Row(
+                    children: [
+                      const Text('태그 선택',
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary)),
+                      const SizedBox(width: 6),
+                      const Text('(최대 3개, 선택)',
+                          style: TextStyle(
+                              fontSize: 12, color: AppColors.textHint)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  tagAsync.when(
+                    loading: () => const SizedBox(
+                      height: 36,
+                      child: Center(
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppColors.primary),
+                        ),
+                      ),
+                    ),
+                    error: (_, __) => const SizedBox.shrink(),
+                    data: (tags) => Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: tags.map((tag) {
+                        final selected = _selectedTags.contains(tag.code);
+                        return GestureDetector(
+                          onTap: () => _toggleTag(tag.code),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? AppColors.primary.withOpacity(0.1)
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: selected
+                                    ? AppColors.primary
+                                    : AppColors.filterBorder,
+                                width: selected ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Text(
+                              tag.label,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                color: selected
+                                    ? AppColors.primary
+                                    : AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ── 리뷰 텍스트 ────────────────────────────────────────
                   const Text('리뷰 작성',
                       style: TextStyle(
                           fontSize: 14,
@@ -186,6 +278,7 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
                     ),
                   ),
 
+                  // ── 사진 첨부 ──────────────────────────────────────────
                   const SizedBox(height: 4),
                   const Text('사진 첨부 (선택)',
                       style: TextStyle(
@@ -249,6 +342,7 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
                       ),
                     ),
 
+                  // ── 등록 버튼 ──────────────────────────────────────────
                   const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
@@ -268,17 +362,20 @@ class _ReviewPopupState extends ConsumerState<ReviewPopup> {
                           child: CircularProgressIndicator(
                               color: Colors.white, strokeWidth: 2))
                           : const Text('등록하기',
-                          style: TextStyle(fontWeight: FontWeight.bold)),
+                          style:
+                          TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
                   const SizedBox(height: 20),
 
+                  // ── 리뷰 목록 ─────────────────────────────────────────
                   reviewAsync.when(
                     loading: () => const Center(
                         child: CircularProgressIndicator(
                             color: AppColors.primary)),
                     error: (e, _) => const Text('리뷰를 불러오지 못했어요.',
-                        style: TextStyle(color: AppColors.textSecondary)),
+                        style:
+                        TextStyle(color: AppColors.textSecondary)),
                     data: (page) => _ReviewList(
                       reviews: page.content,
                       totalCount: page.totalElements,
@@ -335,20 +432,19 @@ class _ReviewList extends ConsumerWidget {
         ]),
         const SizedBox(height: 8),
 
-        if (myReviews.isNotEmpty) ...[
-          ...myReviews.map((r) => _ReviewCard(
-            review: r,
-            toiletId: toiletId,
-            isMyReview: true,
-          )),
-        ],
+        if (myReviews.isNotEmpty) ...myReviews.map((r) => _ReviewCard(
+          review: r,
+          toiletId: toiletId,
+          isMyReview: true,
+        )),
 
         if (otherReviews.isEmpty && myReviews.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Center(
               child: Text('아직 리뷰가 없어요. 첫 리뷰를 남겨보세요!',
-                  style: TextStyle(color: AppColors.textHint, fontSize: 13)),
+                  style: TextStyle(
+                      color: AppColors.textHint, fontSize: 13)),
             ),
           )
         else
@@ -390,13 +486,13 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
               child: const Text('취소')),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('삭제', style: TextStyle(color: AppColors.closed)),
+            child:
+            const Text('삭제', style: TextStyle(color: AppColors.closed)),
           ),
         ],
       ),
     );
     if (confirm == true) {
-      // String? 반환: null이면 성공, 문자열이면 에러 메시지
       final error = await ref
           .read(reviewNotifierProvider.notifier)
           .delete(toiletId: widget.toiletId, reviewId: widget.review.id);
@@ -436,7 +532,8 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
           children: [
             if (widget.isMyReview) ...[
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: AppColors.primary,
                   borderRadius: BorderRadius.circular(20),
@@ -475,7 +572,8 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
               const Spacer(),
               Text(
                 _formatDate(widget.review.createdAt),
-                style: const TextStyle(fontSize: 11, color: AppColors.textHint),
+                style:
+                const TextStyle(fontSize: 11, color: AppColors.textHint),
               ),
             ]),
 
@@ -487,6 +585,35 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
                       fontSize: 13,
                       color: AppColors.textPrimary,
                       height: 1.4)),
+            ],
+
+            // ── 태그 칩 표시 (신규) ────────────────────────────────────
+            if (widget.review.tags.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: widget.review.tags.map((tag) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: AppColors.primary.withOpacity(0.3)),
+                    ),
+                    child: Text(
+                      tag.label,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
             ],
 
             if (widget.review.imageUrl != null &&

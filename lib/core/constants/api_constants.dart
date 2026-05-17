@@ -13,12 +13,13 @@ class ApiConstants {
   static String reviews(int id) => '/api/v1/toilets/$id/reviews';
   static String deleteReview(int toiletId, int reviewId) =>
       '/api/v1/toilets/$toiletId/reviews/$reviewId';
+  static const String reviewTags = '/api/v1/review-tags'; // ← 추가
 
   // 제보
   static const String reports = '/api/v1/reports';
   static const String myReports = '/api/v1/reports/my';
 
-  // 휴지 요청 ── 신규 추가
+  // 휴지 요청
   static const String paperRequests = '/api/v1/paper-requests';
   static const String paperRequestActiveMarkers =
       '/api/v1/paper-requests/active-markers';
