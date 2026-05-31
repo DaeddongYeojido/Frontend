@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../core/theme/app_colors.dart';
 import '../../provider/report_provider.dart';
 
@@ -15,24 +16,18 @@ class ReportWriteScreen extends ConsumerStatefulWidget {
 
 class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameCtrl    = TextEditingController();
-  final _addressCtrl = TextEditingController();
+  final _nameCtrl      = TextEditingController();
+  final _addressCtrl   = TextEditingController();
   final _openHoursCtrl = TextEditingController();
-  final _memoCtrl    = TextEditingController();
+  final _memoCtrl      = TextEditingController();
 
   double? _lat;
   double? _lng;
-  Marker? _pinMarker;
 
   String? _openStatus;
-  bool? _isDisabled;
-  bool? _isGenderSep;
-  File? _image;
-
-  bool _mapExpanded = false;
-  GoogleMapController? _mapController;
-
-  static const _initialPosition = LatLng(37.5665, 126.9780); // 서울 시청
+  bool?   _isDisabled;
+  bool?   _isGenderSep;
+  File?   _image;
 
   @override
   void dispose() {
@@ -50,17 +45,24 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
     if (picked != null) setState(() => _image = File(picked.path));
   }
 
-  void _onMapTap(LatLng coord) {
-    setState(() {
-      _lat = coord.latitude;
-      _lng = coord.longitude;
-      _pinMarker = Marker(
-        markerId: const MarkerId('pin'),
-        position: coord,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose),
-      );
-    });
-    _mapController?.animateCamera(CameraUpdate.newLatLng(coord));
+  /// 지도 페이지를 열고 결과(LatLng)를 받아옴
+  Future<void> _openMapPicker() async {
+    final result = await Navigator.push<LatLng>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _MapPickerPage(
+          initial: _lat != null && _lng != null
+              ? LatLng(_lat!, _lng!)
+              : null,
+        ),
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _lat = result.latitude;
+        _lng = result.longitude;
+      });
+    }
   }
 
   Future<void> _submit() async {
@@ -72,33 +74,30 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
       return;
     }
 
-    final ok = await ref.read(reportNotifierProvider.notifier).submit(
-          name: _nameCtrl.text.trim(),
-          address: _addressCtrl.text.trim(),
-          lat: _lat!,
-          lng: _lng!,
-          openStatus: _openStatus,
-          isDisabled: _isDisabled,
-          isGenderSep: _isGenderSep,
-          openHours: _openHoursCtrl.text.trim().isEmpty
-              ? null
-              : _openHoursCtrl.text.trim(),
-          memo: _memoCtrl.text.trim().isEmpty ? null : _memoCtrl.text.trim(),
-          image: _image,
-        );
+    final error = await ref.read(reportNotifierProvider.notifier).submit(
+      name:        _nameCtrl.text.trim(),
+      address:     _addressCtrl.text.trim(),
+      lat:         _lat!,
+      lng:         _lng!,
+      openStatus:  _openStatus,
+      isDisabled:  _isDisabled,
+      isGenderSep: _isGenderSep,
+      openHours:   _openHoursCtrl.text.trim().isEmpty
+          ? null : _openHoursCtrl.text.trim(),
+      memo:        _memoCtrl.text.trim().isEmpty
+          ? null : _memoCtrl.text.trim(),
+      image:       _image,
+    );
 
     if (!mounted) return;
-    if (ok) {
+    if (error == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('제보가 등록되었습니다. 검토 후 반영될 예정이에요.')),
       );
       Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('제보 등록에 실패했어요. 다시 시도해주세요.'),
-          backgroundColor: AppColors.closed,
-        ),
+        SnackBar(content: Text(error), backgroundColor: AppColors.closed),
       );
     }
   }
@@ -106,6 +105,7 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
   @override
   Widget build(BuildContext context) {
     final submitState = ref.watch(reportNotifierProvider);
+    final hasPin = _lat != null && _lng != null;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -130,7 +130,7 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
           children: [
-            // ── 기본 정보 ─────────────────────────────────────────────
+            // ── 기본 정보 ──────────────────────────────────────────────
             _SectionHeader(label: '기본 정보', required: true),
             const SizedBox(height: 10),
             _Field(controller: _nameCtrl, label: '화장실 이름',
@@ -139,92 +139,83 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
             _Field(controller: _addressCtrl, label: '주소',
                 hint: '예: 서울특별시 마포구 양화로 160', required: true),
 
-            // ── 위치 설정 ─────────────────────────────────────────────
+            // ── 위치 설정 ──────────────────────────────────────────────
             const SizedBox(height: 20),
             _SectionHeader(label: '위치 설정 (지도에서 핀 찍기)', required: true),
             const SizedBox(height: 8),
-            if (_lat != null && _lng != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(children: [
-                  const Icon(Icons.location_on, size: 14, color: AppColors.primary),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${_lat!.toStringAsFixed(6)}, ${_lng!.toStringAsFixed(6)}',
-                    style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w600),
-                  ),
-                ]),
-              ),
+
+            // 지도 열기 버튼
             GestureDetector(
-              onTap: () => setState(() => _mapExpanded = !_mapExpanded),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                height: _mapExpanded ? 300 : 130,
+              onTap: _openMapPicker,
+              child: Container(
+                height: 72,
                 decoration: BoxDecoration(
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                      color: _lat == null
-                          ? AppColors.filterBorder
-                          : AppColors.primary,
-                      width: 1.5),
-                ),
-                clipBehavior: Clip.hardEdge,
-                child: Stack(
-                  children: [
-                    GoogleMap(
-                      initialCameraPosition: const CameraPosition(
-                        target: _initialPosition,
-                        zoom: 14,
-                      ),
-                      onMapCreated: (ctrl) => _mapController = ctrl,
-                      onTap: _onMapTap,
-                      markers: _pinMarker != null ? {_pinMarker!} : {},
-                      zoomControlsEnabled: false,
-                      myLocationButtonEnabled: false,
+                    color: hasPin ? AppColors.primary : AppColors.filterBorder,
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
                     ),
-                    if (!_mapExpanded)
-                      Positioned.fill(
-                        child: Container(
-                          color: Colors.white.withOpacity(0.3),
-                          child: const Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.touch_app,
-                                    color: AppColors.primary, size: 28),
-                                SizedBox(height: 4),
-                                Text('탭하여 지도 펼치기',
-                                    style: TextStyle(
-                                        color: AppColors.primary,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        backgroundColor: Colors.white)),
-                              ],
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 16),
+                    Icon(
+                      hasPin ? Icons.location_on : Icons.map_outlined,
+                      color: hasPin ? AppColors.primary : AppColors.textHint,
+                      size: 28,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: hasPin
+                          ? Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '위치 선택 완료',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
                             ),
                           ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${_lat!.toStringAsFixed(6)}, ${_lng!.toStringAsFixed(6)}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      )
+                          : const Text(
+                        '지도에서 위치를 골라 핀을 찍어주세요',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textHint,
                         ),
                       ),
-                    if (_mapExpanded)
-                      const Positioned(
-                        top: 8, left: 0, right: 0,
-                        child: Center(
-                          child: Text('지도를 탭하여 위치 선택',
-                              style: TextStyle(
-                                  color: AppColors.primary,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  backgroundColor: Colors.white)),
-                        ),
-                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right,
+                      color: hasPin ? AppColors.primary : AppColors.textHint,
+                    ),
+                    const SizedBox(width: 8),
                   ],
                 ),
               ),
             ),
 
-            // ── 운영 정보 ─────────────────────────────────────────────
+            // ── 운영 정보 ──────────────────────────────────────────────
             const SizedBox(height: 20),
             _SectionHeader(label: '운영 정보', required: false),
             const SizedBox(height: 10),
@@ -236,7 +227,7 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
             const SizedBox(height: 6),
             _ChoiceRow<String>(
               options: const ['OPEN', 'NIGHT', 'CLOSED'],
-              labels: const ['운영중', '야간운영', '폐쇄'],
+              labels:  const ['운영중', '야간운영', '폐쇄'],
               selected: _openStatus,
               onSelect: (v) =>
                   setState(() => _openStatus = _openStatus == v ? null : v),
@@ -266,7 +257,7 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
             _Field(controller: _openHoursCtrl, label: '운영 시간',
                 hint: '예: 06:00~22:00', required: false),
 
-            // ── 메모 ──────────────────────────────────────────────────
+            // ── 메모 ───────────────────────────────────────────────────
             const SizedBox(height: 20),
             _SectionHeader(label: '메모', required: false),
             const SizedBox(height: 10),
@@ -292,7 +283,7 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
               ),
             ),
 
-            // ── 사진 첨부 ─────────────────────────────────────────────
+            // ── 사진 첨부 ──────────────────────────────────────────────
             const SizedBox(height: 12),
             _SectionHeader(label: '사진 첨부', required: false),
             const SizedBox(height: 10),
@@ -302,7 +293,7 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
               onRemove: () => setState(() => _image = null),
             ),
 
-            // ── 제출 ──────────────────────────────────────────────────
+            // ── 제출 버튼 ──────────────────────────────────────────────
             const SizedBox(height: 28),
             SizedBox(
               width: double.infinity,
@@ -318,16 +309,286 @@ class _ReportWriteScreenState extends ConsumerState<ReportWriteScreen> {
                 ),
                 child: submitState.isLoading
                     ? const SizedBox(
-                        width: 22, height: 22,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2.5))
+                    width: 22, height: 22,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2.5))
                     : const Text('제보 등록하기',
-                        style: TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.bold)),
+                    style: TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.bold)),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── 전체화면 지도 핀 찍기 페이지 ──────────────────────────────────────────────
+
+class _MapPickerPage extends StatefulWidget {
+  final LatLng? initial;
+  const _MapPickerPage({this.initial});
+
+  @override
+  State<_MapPickerPage> createState() => _MapPickerPageState();
+}
+
+class _MapPickerPageState extends State<_MapPickerPage> {
+  static const _defaultPosition = LatLng(37.5665, 126.9780);
+
+  GoogleMapController? _ctrl;
+  LatLng? _selected;
+  Marker? _marker;
+  LatLng _initialTarget = _defaultPosition;
+  bool _loadingLocation = true;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initial != null) {
+      _selected = widget.initial;
+      _marker = _buildMarker(widget.initial!);
+      _initialTarget = widget.initial!;
+      _loadingLocation = false;
+    } else {
+      _fetchCurrentLocation(moveCamera: false);
+    }
+  }
+
+  Future<void> _fetchCurrentLocation({bool moveCamera = true}) async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+
+      LocationPermission perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+        if (perm == LocationPermission.denied) return;
+      }
+      if (perm == LocationPermission.deniedForever) return;
+
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      final target = LatLng(pos.latitude, pos.longitude);
+
+      if (!mounted) return;
+      setState(() {
+        _initialTarget = target;
+        _loadingLocation = false;
+      });
+
+      if (moveCamera) {
+        _ctrl?.animateCamera(CameraUpdate.newLatLngZoom(target, 16));
+      } else {
+        // initState에서 호출된 경우: 지도가 아직 생성 안 됐을 수 있으니
+        // onMapCreated 콜백에서 이동하도록 플래그만 세팅
+        _pendingMoveToUser = true;
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingLocation = false);
+    }
+  }
+
+  bool _pendingMoveToUser = false;
+
+  Marker _buildMarker(LatLng pos) => Marker(
+    markerId: const MarkerId('pin'),
+    position: pos,
+    icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRose),
+  );
+
+  void _onTap(LatLng pos) {
+    setState(() {
+      _selected = pos;
+      _marker = _buildMarker(pos);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPin = _selected != null;
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          // ── 전체화면 지도 ────────────────────────────────────────────
+          GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: _initialTarget,
+              zoom: 16,
+            ),
+            onMapCreated: (ctrl) {
+              _ctrl = ctrl;
+              if (_pendingMoveToUser) {
+                _pendingMoveToUser = false;
+                Future.delayed(const Duration(milliseconds: 300), () {
+                  _ctrl?.animateCamera(
+                    CameraUpdate.newLatLngZoom(_initialTarget, 16),
+                  );
+                });
+              }
+            },
+            onTap: _onTap,
+            markers: _marker != null ? {_marker!} : {},
+            myLocationEnabled: true,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+          ),
+
+          // ── 로딩 인디케이터 (GPS 아직 못 가져온 경우) ─────────────────
+          if (_loadingLocation)
+            Positioned(
+              top: 80, left: 0, right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 6),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 14, height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 8),
+                      Text('현재 위치 불러오는 중…', style: TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // ── 상단 바 ──────────────────────────────────────────────────
+          Positioned(
+            top: 0, left: 0, right: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                child: Row(
+                  children: [
+                    // 닫기 버튼
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.15),
+                              blurRadius: 6,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(Icons.close,
+                            color: AppColors.textPrimary, size: 20),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    // 좌표 표시 바
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 6,
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          hasPin
+                              ? '${_selected!.latitude.toStringAsFixed(6)}, ${_selected!.longitude.toStringAsFixed(6)}'
+                              : '지도를 탭하여 위치를 선택하세요',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: hasPin
+                                ? AppColors.primary
+                                : AppColors.textHint,
+                            fontWeight: hasPin
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // ── 현위치 버튼 (우측 하단) ──────────────────────────────────
+          Positioned(
+            right: 16,
+            bottom: 88,
+            child: GestureDetector(
+              onTap: () => _fetchCurrentLocation(moveCamera: true),
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.18),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.my_location,
+                    color: AppColors.primary, size: 22),
+              ),
+            ),
+          ),
+
+          // ── 하단 확인 버튼 ───────────────────────────────────────────
+          Positioned(
+            left: 16, right: 16, bottom: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: SizedBox(
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: hasPin
+                        ? () => Navigator.pop(context, _selected)
+                        : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      disabledBackgroundColor:
+                      AppColors.primary.withOpacity(0.4),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                      elevation: 0,
+                    ),
+                    child: Text(
+                      hasPin ? '이 위치로 선택' : '위치를 먼저 선택해주세요',
+                      style: const TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -341,19 +602,19 @@ class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.label, required this.required});
   @override
   Widget build(BuildContext context) => Row(children: [
-        Text(label,
-            style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary)),
-        if (required) ...[
-          const SizedBox(width: 4),
-          const Text('*', style: TextStyle(color: AppColors.closed, fontSize: 14)),
-        ] else ...[
-          const SizedBox(width: 6),
-          const Text('(선택)', style: TextStyle(fontSize: 12, color: AppColors.textHint)),
-        ],
-      ]);
+    Text(label,
+        style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textPrimary)),
+    if (required) ...[
+      const SizedBox(width: 4),
+      const Text('*', style: TextStyle(color: AppColors.closed, fontSize: 14)),
+    ] else ...[
+      const SizedBox(width: 6),
+      const Text('(선택)', style: TextStyle(fontSize: 12, color: AppColors.textHint)),
+    ],
+  ]);
 }
 
 class _Field extends StatelessWidget {
@@ -362,29 +623,29 @@ class _Field extends StatelessWidget {
   final String hint;
   final bool required;
   const _Field({required this.controller, required this.label,
-      required this.hint, required this.required});
+    required this.hint, required this.required});
   @override
   Widget build(BuildContext context) => TextFormField(
-        controller: controller,
-        validator: required
-            ? (v) => (v == null || v.trim().isEmpty) ? '$label을(를) 입력해주세요.' : null
-            : null,
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 13),
-          labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.filterBorder)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.primary)),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.filterBorder)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        ),
-      );
+    controller: controller,
+    validator: required
+        ? (v) => (v == null || v.trim().isEmpty) ? '$label을(를) 입력해주세요.' : null
+        : null,
+    decoration: InputDecoration(
+      labelText: label,
+      hintText: hint,
+      hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 13),
+      labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.filterBorder)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.primary)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.filterBorder)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    ),
+  );
 }
 
 class _ChoiceRow<T> extends StatelessWidget {
@@ -394,35 +655,35 @@ class _ChoiceRow<T> extends StatelessWidget {
   final ValueChanged<T> onSelect;
   final List<Color> activeColors;
   const _ChoiceRow({required this.options, required this.labels,
-      required this.selected, required this.onSelect, required this.activeColors});
+    required this.selected, required this.onSelect, required this.activeColors});
   @override
   Widget build(BuildContext context) => Row(
-        children: List.generate(options.length, (i) {
-          final active = selected == options[i];
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onSelect(options[i]),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                margin: EdgeInsets.only(right: i < options.length - 1 ? 6 : 0),
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: active ? activeColors[i].withOpacity(0.12) : Colors.white,
-                  border: Border.all(
-                      color: active ? activeColors[i] : AppColors.filterBorder),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(labels[i],
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: active ? activeColors[i] : AppColors.textSecondary)),
-              ),
+    children: List.generate(options.length, (i) {
+      final active = selected == options[i];
+      return Expanded(
+        child: GestureDetector(
+          onTap: () => onSelect(options[i]),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            margin: EdgeInsets.only(right: i < options.length - 1 ? 6 : 0),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: active ? activeColors[i].withOpacity(0.12) : Colors.white,
+              border: Border.all(
+                  color: active ? activeColors[i] : AppColors.filterBorder),
+              borderRadius: BorderRadius.circular(10),
             ),
-          );
-        }),
+            child: Text(labels[i],
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: active ? activeColors[i] : AppColors.textSecondary)),
+          ),
+        ),
       );
+    }),
+  );
 }
 
 class _ToggleChip extends StatelessWidget {
@@ -431,7 +692,7 @@ class _ToggleChip extends StatelessWidget {
   final bool? value;
   final ValueChanged<bool?> onToggle;
   const _ToggleChip({required this.icon, required this.label,
-      required this.value, required this.onToggle});
+    required this.value, required this.onToggle});
   @override
   Widget build(BuildContext context) {
     final isOn = value == true;

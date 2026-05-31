@@ -33,6 +33,10 @@
             android:value="AIzaSyBcRsiM8ZSbcoqL40RS_BEzJR6w5Cw_PGo"/>
 
         <meta-data
+            android:name="com.google.android.maps.v2.RENDERER"
+            android:value="latest"/>
+
+        <meta-data
             android:name="flutterEmbedding"
             android:value="2"/>
     </application>
