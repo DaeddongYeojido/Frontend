@@ -30,8 +30,74 @@ final nearbyToiletsProvider = FutureProvider<List<ToiletSummary>>((ref) async {
 });
 
 final toiletDetailProvider =
-    FutureProvider.family<ToiletDetail, int>((ref, id) async {
+FutureProvider.family<ToiletDetail, int>((ref, id) async {
   return ref.watch(toiletRepositoryProvider).getDetail(id);
 });
 
 final selectedToiletIdProvider = StateProvider<int?>((ref) => null);
+
+// ── 키워드 검색 ──────────────────────────────────────────────────────────────
+
+class ToiletSearchState {
+  final String keyword;
+  final List<ToiletSearchResult> results;
+  final bool isLoading;
+  final String? error;
+
+  const ToiletSearchState({
+    this.keyword = '',
+    this.results = const [],
+    this.isLoading = false,
+    this.error,
+  });
+
+  ToiletSearchState copyWith({
+    String? keyword,
+    List<ToiletSearchResult>? results,
+    bool? isLoading,
+    String? error,
+  }) =>
+      ToiletSearchState(
+        keyword: keyword ?? this.keyword,
+        results: results ?? this.results,
+        isLoading: isLoading ?? this.isLoading,
+        error: error,
+      );
+
+  /// 2자 이상 입력했는데 결과가 없고 로딩도 아닌 상태
+  bool get showEmpty =>
+      keyword.trim().length >= 2 && results.isEmpty && !isLoading && error == null;
+}
+
+class ToiletSearchNotifier extends Notifier<ToiletSearchState> {
+  @override
+  ToiletSearchState build() => const ToiletSearchState();
+
+  Future<void> search(String keyword, {double? lat, double? lng}) async {
+    if (keyword.trim().length < 2) {
+      state = state.copyWith(keyword: keyword, results: [], isLoading: false, error: null);
+      return;
+    }
+    state = state.copyWith(keyword: keyword, isLoading: true, error: null);
+    try {
+      final results = await ref.read(toiletRepositoryProvider).searchToilets(
+        keyword: keyword.trim(),
+        lat: lat,
+        lng: lng,
+      );
+      state = state.copyWith(results: results, isLoading: false);
+    } catch (_) {
+      state = state.copyWith(
+        isLoading: false,
+        error: '검색 중 오류가 발생했습니다',
+        results: [],
+      );
+    }
+  }
+
+  void clear() => state = const ToiletSearchState();
+}
+
+final toiletSearchProvider =
+NotifierProvider<ToiletSearchNotifier, ToiletSearchState>(
+    ToiletSearchNotifier.new);

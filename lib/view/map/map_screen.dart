@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import '../../provider/toilet_provider.dart';
 import '../../provider/filter_provider.dart';
 import '../../data/model/toilet_summary.dart';
 import '../toilet/toilet_bottom_sheet.dart';
+import '../widget/open_status_badge.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -31,11 +33,66 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   LatLng? _mapCenter;
   bool _showSearchHereButton = false;
 
+  // ── 키워드 검색 ──────────────────────────────────────────────────────────
+  bool _searchExpanded = false;
+  final _searchCtrl = TextEditingController();
+  final _searchFocus = FocusNode();
+  Timer? _debounce;
+
   @override
   void initState() {
     super.initState();
     _loadMarkerIcon();
     _buildMyLocationCircleMarker();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _searchFocus.dispose();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  // ── 검색창 열기/닫기 ─────────────────────────────────────────────────────
+  void _openSearch() {
+    setState(() => _searchExpanded = true);
+    Future.delayed(
+      const Duration(milliseconds: 250),
+          () => _searchFocus.requestFocus(),
+    );
+  }
+
+  void _closeSearch() {
+    _debounce?.cancel();
+    _searchCtrl.clear();
+    _searchFocus.unfocus();
+    ref.read(toiletSearchProvider.notifier).clear();
+    setState(() => _searchExpanded = false);
+  }
+
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    if (value.trim().length < 2) {
+      ref.read(toiletSearchProvider.notifier).clear();
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      final pos = ref.read(locationProvider).value;
+      ref.read(toiletSearchProvider.notifier).search(
+        value,
+        lat: pos?.latitude,
+        lng: pos?.longitude,
+      );
+    });
+  }
+
+  void _onResultTap(ToiletSearchResult result) {
+    _closeSearch();
+    _ctrl?.animateCamera(
+      CameraUpdate.newLatLngZoom(LatLng(result.lat, result.lng), 17),
+    );
+    setState(() => _selectedId = result.id);
   }
 
   Future<void> _loadMarkerIcon() async {
@@ -47,7 +104,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       );
       final ui.FrameInfo fi = await codec.getNextFrame();
       final ByteData? byteData =
-          await fi.image.toByteData(format: ui.ImageByteFormat.png);
+      await fi.image.toByteData(format: ui.ImageByteFormat.png);
       if (byteData != null) {
         _markerIcon =
             BitmapDescriptor.fromBytes(byteData.buffer.asUint8List());
@@ -86,6 +143,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Widget build(BuildContext context) {
     final locationAsync = ref.watch(locationProvider);
     final filter = ref.watch(toiletFilterProvider);
+    final searchState = ref.watch(toiletSearchProvider);
+    final topPadding = MediaQuery.of(context).padding.top;
 
     // nearbyToiletsProvider가 바뀌면 마커 업데이트
     ref.listen(nearbyToiletsProvider, (_, next) {
@@ -94,10 +153,21 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     ref.listen(locationProvider, (_, next) {
       next.whenData(
-          (pos) => _updateLocationCircle(pos.latitude, pos.longitude));
+              (pos) => _updateLocationCircle(pos.latitude, pos.longitude));
+    });
+
+    // 검색 에러 → SnackBar
+    ref.listen(toiletSearchProvider, (prev, next) {
+      if (next.error != null && next.error != prev?.error) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(next.error!)));
+      }
     });
 
     final bottomSheetVisible = _selectedId != null;
+    final showResults = _searchExpanded &&
+        _searchCtrl.text.trim().length >= 2 &&
+        (searchState.isLoading || searchState.results.isNotEmpty || searchState.showEmpty);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -106,7 +176,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           locationAsync.when(
             loading: () => const Center(
                 child:
-                    CircularProgressIndicator(color: AppColors.primary)),
+                CircularProgressIndicator(color: AppColors.primary)),
             error: (e, _) => Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -157,6 +227,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               },
               onTap: (_) {
                 if (_selectedId != null) setState(() => _selectedId = null);
+                if (_searchExpanded) _closeSearch();
               },
             ),
           ),
@@ -164,11 +235,37 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           _TopBar(
             filter: filter,
             onFilterChanged: (f) =>
-                ref.read(toiletFilterProvider.notifier).state = f,
+            ref.read(toiletFilterProvider.notifier).state = f,
           ),
 
+          // ── 우측 상단 돋보기 / 펼쳐지는 검색창 ──────────────────────────
+          Positioned(
+            top: topPadding + 6,
+            right: 14,
+            child: _SearchBar(
+              expanded: _searchExpanded,
+              controller: _searchCtrl,
+              focusNode: _searchFocus,
+              onOpen: _openSearch,
+              onClose: _closeSearch,
+              onChanged: _onSearchChanged,
+            ),
+          ),
+
+          // ── 검색 결과 오버레이 ──────────────────────────────────────────
+          if (showResults)
+            Positioned(
+              top: topPadding + 54,
+              left: 14,
+              right: 14,
+              child: _SearchResultOverlay(
+                searchState: searchState,
+                onTap: _onResultTap,
+              ),
+            ),
+
           // "이 지역 검색" 버튼
-          if (_showSearchHereButton)
+          if (_showSearchHereButton && !_searchExpanded)
             Positioned(
               top: 130,
               left: 0,
@@ -236,7 +333,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 }
               },
               child:
-                  const Icon(Icons.my_location, color: AppColors.primary),
+              const Icon(Icons.my_location, color: AppColors.primary),
             ),
           ),
 
@@ -385,9 +482,214 @@ class _FilterChip extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.5,
                   color:
-                      isActive ? Colors.white : AppColors.textSecondary)),
+                  isActive ? Colors.white : AppColors.textSecondary)),
         ]),
       ),
+    );
+  }
+}
+
+// ── 돋보기 버튼 → 옆으로 펼쳐지는 검색창 ────────────────────────────────────
+
+class _SearchBar extends StatelessWidget {
+  final bool expanded;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final VoidCallback onOpen;
+  final VoidCallback onClose;
+  final ValueChanged<String> onChanged;
+
+  const _SearchBar({
+    required this.expanded,
+    required this.controller,
+    required this.focusNode,
+    required this.onOpen,
+    required this.onClose,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      height: 40,
+      width: expanded ? MediaQuery.of(context).size.width - 28 : 40,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.13),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: expanded
+          ? Row(
+        children: [
+          const SizedBox(width: 12),
+          const Icon(Icons.search, size: 18, color: AppColors.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              onChanged: onChanged,
+              style: const TextStyle(
+                  fontSize: 14, color: AppColors.textPrimary),
+              decoration: const InputDecoration(
+                hintText: '화장실 이름, 주소 검색',
+                hintStyle: TextStyle(
+                    fontSize: 13, color: AppColors.textHint),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: onClose,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 10),
+              child: Icon(Icons.close,
+                  size: 18, color: AppColors.textSecondary),
+            ),
+          ),
+        ],
+      )
+          : GestureDetector(
+        onTap: onOpen,
+        child: const Center(
+          child:
+          Icon(Icons.search, size: 20, color: AppColors.primary),
+        ),
+      ),
+    );
+  }
+}
+
+// ── 검색 결과 오버레이 ────────────────────────────────────────────────────────
+
+class _SearchResultOverlay extends StatelessWidget {
+  final ToiletSearchState searchState;
+  final ValueChanged<ToiletSearchResult> onTap;
+
+  const _SearchResultOverlay({
+    required this.searchState,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 340),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.12),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: _buildContent(),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    if (searchState.isLoading) {
+      return const SizedBox(
+        height: 72,
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+                strokeWidth: 2.5, color: AppColors.primary),
+          ),
+        ),
+      );
+    }
+    if (searchState.showEmpty) {
+      return const SizedBox(
+        height: 72,
+        child: Center(
+          child: Text(
+            '검색 결과가 없습니다',
+            style: TextStyle(fontSize: 13, color: AppColors.textHint),
+          ),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: EdgeInsets.zero,
+      shrinkWrap: true,
+      itemCount: searchState.results.length,
+      separatorBuilder: (_, __) =>
+      const Divider(height: 1, indent: 16, endIndent: 16),
+      itemBuilder: (_, i) {
+        final item = searchState.results[i];
+        return InkWell(
+          onTap: () => onTap(item),
+          child: Padding(
+            padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              item.name,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          OpenStatusBadge(status: item.openStatus),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        item.address,
+                        style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                if (item.distanceLabel != null) ...[
+                  const SizedBox(width: 10),
+                  Text(
+                    item.distanceLabel!,
+                    style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

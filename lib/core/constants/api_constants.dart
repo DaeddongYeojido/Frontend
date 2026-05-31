@@ -4,13 +4,14 @@ class ApiConstants {
   // 화장실
   static const String nearby   = '/api/v1/toilets/nearby';
   static const String nearest  = '/api/v1/toilets/nearest';
+  static const String search   = '/api/v1/toilets/search'; // ← 검색
   static String detail(int id) => '/api/v1/toilets/$id';
   static String crowd(int id)  => '/api/v1/toilets/$id/crowd';
 
   // 리뷰
   static String reviews(int id)                       => '/api/v1/toilets/$id/reviews';
   static String deleteReview(int toiletId, int reviewId)
-      => '/api/v1/toilets/$toiletId/reviews/$reviewId';
+  => '/api/v1/toilets/$toiletId/reviews/$reviewId';
 
   // 제보
   static const String reports   = '/api/v1/reports';
