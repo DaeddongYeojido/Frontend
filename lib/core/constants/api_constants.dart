@@ -4,6 +4,9 @@ class ApiConstants {
   //'http://10.0.2.2:8080' 192.168.219.104, https://daeddong.duckdns.org
 
   // 화장실
+  static const String nearby   = '/api/v1/toilets/nearby';
+  static const String nearest  = '/api/v1/toilets/nearest';
+  static const String search   = '/api/v1/toilets/search'; // ← 검색
   static const String nearby = '/api/v1/toilets/nearby';
   static const String nearest = '/api/v1/toilets/nearest';
   static String detail(int id) => '/api/v1/toilets/$id';

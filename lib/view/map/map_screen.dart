@@ -14,6 +14,7 @@ import '../../provider/paper_request_provider.dart';
 import '../../data/model/toilet_summary.dart';
 import '../../data/model/paper_request.dart';
 import '../toilet/toilet_bottom_sheet.dart';
+import '../widget/open_status_badge.dart';
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -34,8 +35,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   LatLng? _mapCenter;
   bool _showSearchHereButton = false;
 
-  // 휴지 분수 애니메이션 컨트롤러 제거 (새 방식에서는 _PaperOverlay 내부에서 관리)
-
+  // ── 키워드 검색 ──────────────────────────────────────────────────────────
+  bool _searchExpanded = false;
+  final _searchCtrl = TextEditingController();
+  final _searchFocus = FocusNode();
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -46,7 +50,51 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   @override
   void dispose() {
+    _searchCtrl.dispose();
+    _searchFocus.dispose();
+    _debounce?.cancel();
     super.dispose();
+  }
+
+  // ── 검색창 열기/닫기 ─────────────────────────────────────────────────────
+  void _openSearch() {
+    setState(() => _searchExpanded = true);
+    Future.delayed(
+      const Duration(milliseconds: 250),
+          () => _searchFocus.requestFocus(),
+    );
+  }
+
+  void _closeSearch() {
+    _debounce?.cancel();
+    _searchCtrl.clear();
+    _searchFocus.unfocus();
+    ref.read(toiletSearchProvider.notifier).clear();
+    setState(() => _searchExpanded = false);
+  }
+
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    if (value.trim().length < 2) {
+      ref.read(toiletSearchProvider.notifier).clear();
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      final pos = ref.read(locationProvider).value;
+      ref.read(toiletSearchProvider.notifier).search(
+        value,
+        lat: pos?.latitude,
+        lng: pos?.longitude,
+      );
+    });
+  }
+
+  void _onResultTap(ToiletSearchResult result) {
+    _closeSearch();
+    _ctrl?.animateCamera(
+      CameraUpdate.newLatLngZoom(LatLng(result.lat, result.lng), 17),
+    );
+    setState(() => _selectedId = result.id);
   }
 
   Future<void> _loadMarkerIcon() async {
@@ -92,6 +140,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Widget build(BuildContext context) {
     final locationAsync = ref.watch(locationProvider);
     final filter = ref.watch(toiletFilterProvider);
+    final searchState = ref.watch(toiletSearchProvider);
+    final topPadding = MediaQuery.of(context).padding.top;
     final activeMarkersAsync = ref.watch(activeMarkersProvider);
 
     // ── 핵심 수정: AsyncLoading 중에도 이전 value 유지되도록 직접 꺼냄
@@ -108,7 +158,18 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               (pos) => _updateLocationCircle(pos.latitude, pos.longitude));
     });
 
+    // 검색 에러 → SnackBar
+    ref.listen(toiletSearchProvider, (prev, next) {
+      if (next.error != null && next.error != prev?.error) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(next.error!)));
+      }
+    });
+
     final bottomSheetVisible = _selectedId != null;
+    final showResults = _searchExpanded &&
+        _searchCtrl.text.trim().length >= 2 &&
+        (searchState.isLoading || searchState.results.isNotEmpty || searchState.showEmpty);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -167,6 +228,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               },
               onTap: (_) {
                 if (_selectedId != null) setState(() => _selectedId = null);
+                if (_searchExpanded) _closeSearch();
               },
             ),
           ),
@@ -259,7 +321,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   setState(() => _showSearchHereButton = false);
                 }
               },
-              child: const Icon(Icons.my_location, color: AppColors.primary),
+              child:
+              const Icon(Icons.my_location, color: AppColors.primary),
             ),
           ),
 
@@ -934,6 +997,211 @@ class _FilterChip extends StatelessWidget {
                   isActive ? Colors.white : AppColors.textSecondary)),
         ]),
       ),
+    );
+  }
+}
+
+// ── 돋보기 버튼 → 옆으로 펼쳐지는 검색창 ────────────────────────────────────
+
+class _SearchBar extends StatelessWidget {
+  final bool expanded;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final VoidCallback onOpen;
+  final VoidCallback onClose;
+  final ValueChanged<String> onChanged;
+
+  const _SearchBar({
+    required this.expanded,
+    required this.controller,
+    required this.focusNode,
+    required this.onOpen,
+    required this.onClose,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      height: 40,
+      width: expanded ? MediaQuery.of(context).size.width - 28 : 40,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.13),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: expanded
+          ? Row(
+        children: [
+          const SizedBox(width: 12),
+          const Icon(Icons.search, size: 18, color: AppColors.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              onChanged: onChanged,
+              style: const TextStyle(
+                  fontSize: 14, color: AppColors.textPrimary),
+              decoration: const InputDecoration(
+                hintText: '화장실 이름, 주소 검색',
+                hintStyle: TextStyle(
+                    fontSize: 13, color: AppColors.textHint),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: onClose,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 10),
+              child: Icon(Icons.close,
+                  size: 18, color: AppColors.textSecondary),
+            ),
+          ),
+        ],
+      )
+          : GestureDetector(
+        onTap: onOpen,
+        child: const Center(
+          child:
+          Icon(Icons.search, size: 20, color: AppColors.primary),
+        ),
+      ),
+    );
+  }
+}
+
+// ── 검색 결과 오버레이 ────────────────────────────────────────────────────────
+
+class _SearchResultOverlay extends StatelessWidget {
+  final ToiletSearchState searchState;
+  final ValueChanged<ToiletSearchResult> onTap;
+
+  const _SearchResultOverlay({
+    required this.searchState,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 340),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.12),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: _buildContent(),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    if (searchState.isLoading) {
+      return const SizedBox(
+        height: 72,
+        child: Center(
+          child: SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(
+                strokeWidth: 2.5, color: AppColors.primary),
+          ),
+        ),
+      );
+    }
+    if (searchState.showEmpty) {
+      return const SizedBox(
+        height: 72,
+        child: Center(
+          child: Text(
+            '검색 결과가 없습니다',
+            style: TextStyle(fontSize: 13, color: AppColors.textHint),
+          ),
+        ),
+      );
+    }
+    return ListView.separated(
+      padding: EdgeInsets.zero,
+      shrinkWrap: true,
+      itemCount: searchState.results.length,
+      separatorBuilder: (_, __) =>
+      const Divider(height: 1, indent: 16, endIndent: 16),
+      itemBuilder: (_, i) {
+        final item = searchState.results[i];
+        return InkWell(
+          onTap: () => onTap(item),
+          child: Padding(
+            padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              item.name,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          OpenStatusBadge(status: item.openStatus),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        item.address,
+                        style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                if (item.distanceLabel != null) ...[
+                  const SizedBox(width: 10),
+                  Text(
+                    item.distanceLabel!,
+                    style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

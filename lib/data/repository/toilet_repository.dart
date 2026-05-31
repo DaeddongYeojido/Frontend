@@ -37,4 +37,21 @@ class ToiletRepository {
     final res = await _dio.get(ApiConstants.detail(id));
     return ToiletDetail.fromJson(res.data['data'] as Map<String, dynamic>);
   }
+
+  // ── 키워드 검색 ──────────────────────────────────────────────────────────
+  Future<List<ToiletSearchResult>> searchToilets({
+    required String keyword,
+    double? lat,
+    double? lng,
+  }) async {
+    final res = await _dio.get(ApiConstants.search, queryParameters: {
+      'keyword': keyword,
+      if (lat != null) 'lat': lat,
+      if (lng != null) 'lng': lng,
+    });
+    final List data = res.data['data'] as List;
+    return data
+        .map((e) => ToiletSearchResult.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
 }
